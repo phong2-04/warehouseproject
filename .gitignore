@@ -1,8 +1,34 @@
+
+# Environment and secrets
 .env
 .env.*
 !.env.example
-*.log
+
+# Go binaries
 *.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test artifacts
 *.test
+*.out
+coverage.*
+!coverage.go
+*.coverprofile
+profile.cov
+
+# Go workspace
+go.work
+go.work.sum
+
+# Dependencies
 /vendor/
-/.idea/
+
+# IDE and editor
+.idea/
+.vscode/
+
+# Logs
+*.log
