@@ -62,3 +62,4 @@ func ConnectDB() (*pgxpool.Pool, error) {
 	fmt.Println("Ket noi PostgreSQL thanh cong!")
 	return pool, nil
 }
+
