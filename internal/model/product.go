@@ -5,12 +5,13 @@ import "time"
 
 // Product lưu thông tin sản phẩm trong kho.
 type Product struct {
-	ID          int       `json:"id"`
-	Name        string    `json:"name"`
-	SKU         string    `json:"sku"`
-	Description string    `json:"description"`
-	Price       float64   `json:"price"`
-	Quantity    int       `json:"quantity"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	ID         int64     `json:"id"`
+	Code       string    `json:"code"`
+	Name       string    `json:"name"`
+	CategoryID *int64    `json:"category_id"`
+	Price      float64   `json:"price"`
+	Quantity   int       `json:"quantity"`
+	MinStock   int       `json:"min_stock"`
+	CreatedAt  time.Time `json:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
 }

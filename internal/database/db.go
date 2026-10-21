@@ -1,39 +1,40 @@
-
 package database
 
 import (
 	"context"
-	"fmt"
+	"log"
 	"os"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// ConnectDB tạo kết nối đến PostgreSQL.
 func ConnectDB() (*pgxpool.Pool, error) {
-	host := os.Getenv("DB_HOST")
-	port := os.Getenv("DB_PORT")
-	user := os.Getenv("DB_USER")
-	password := os.Getenv("DB_PASSWORD")
-	dbname := os.Getenv("DB_NAME")
-
-	if host == "" {
-		host = "localhost"
-	}
-	if port == "" {
-		port = "5432"
-	}
-	if user == "" {
-		user = "postgres"
-	}
-	if dbname == "" {
-		dbname = "warehouse_db"
+	dbHost := os.Getenv("DB_HOST")
+	if dbHost == "" {
+		dbHost = "localhost"
 	}
 
-	connString := fmt.Sprintf(
-		"host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
-		host, port, user, password, dbname,
-	)
+	dbPort := os.Getenv("DB_PORT")
+	if dbPort == "" {
+		dbPort = "5432"
+	}
+
+	dbUser := os.Getenv("DB_USER")
+	if dbUser == "" {
+		dbUser = "postgres"
+	}
+
+	dbPassword := os.Getenv("DB_PASSWORD")
+	dbName := os.Getenv("DB_NAME")
+	if dbName == "" {
+		dbName = "warehouse_db"
+	}
+
+	connString := "postgres://" + dbUser + ":" + dbPassword +
+		"@" + dbHost + ":" + dbPort + "/" + dbName +
+		"?sslmode=disable"
 
 	config, err := pgxpool.ParseConfig(connString)
 	if err != nil {
@@ -44,22 +45,16 @@ func ConnectDB() (*pgxpool.Pool, error) {
 	config.MinConns = 1
 	config.MaxConnLifetime = time.Hour
 
-	ctx, cancel := context.WithTimeout(
-		context.Background(), 5*time.Second,
-	)
-	defer cancel()
-
-	pool, err := pgxpool.NewWithConfig(ctx, config)
+	db, err := pgxpool.NewWithConfig(context.Background(), config)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := pool.Ping(ctx); err != nil {
-		pool.Close()
+	if err := db.Ping(context.Background()); err != nil {
+		db.Close()
 		return nil, err
 	}
 
-	fmt.Println("Ket noi PostgreSQL thanh cong!")
-	return pool, nil
+	log.Println("Ket noi PostgreSQL thanh cong!")
+	return db, nil
 }
-

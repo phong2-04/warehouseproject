@@ -19,13 +19,17 @@ type LoginRequest struct {
 	Password string `json:"password"`
 }
 
+type RefreshTokenRequest struct {
+	RefreshToken string `json:"refresh_token"`
+}
+
 func NewAuthHandler(userService *service.UserService) *AuthHandler {
 	return &AuthHandler{
 		UserService: userService,
 	}
 }
 
-// Login tiếp nhận yêu cầu đăng nhập và trả về JWT.
+// Login tiếp nhận yêu cầu đăng nhập và trả về hai loại token.
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 
@@ -82,6 +86,65 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, result)
+}
+
+// RefreshToken cấp Access Token mới từ Refresh Token hợp lệ.
+func (h *AuthHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+
+	if r.Method != http.MethodPost {
+		w.Header().Set("Allow", http.MethodPost)
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{
+			"error": "Method khong duoc ho tro",
+		})
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+
+	var req RefreshTokenRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error": "Du lieu JSON khong hop le",
+		})
+		return
+	}
+
+	req.RefreshToken = strings.TrimSpace(req.RefreshToken)
+	if req.RefreshToken == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error": "Refresh token khong duoc de trong",
+		})
+		return
+	}
+
+	accessToken, err := h.UserService.RefreshAccessToken(req.RefreshToken)
+	if err != nil {
+		if errors.Is(err, service.ErrJWTSecretRequired) {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{
+				"error": "Server chua cau hinh JWT",
+			})
+			return
+		}
+
+		if errors.Is(err, service.ErrInvalidRefreshToken) {
+			writeJSON(w, http.StatusUnauthorized, map[string]string{
+				"error": "Refresh token khong hop le hoac da het han",
+			})
+			return
+		}
+
+		writeJSON(w, http.StatusInternalServerError, map[string]string{
+			"error": "Loi lam moi token",
+		})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"access_token": accessToken,
+		"token_type":   "Bearer",
+		"expires_in":   int64(service.AccessTokenDuration.Seconds()),
+	})
 }
 
 func writeJSON(w http.ResponseWriter, status int, data any) {

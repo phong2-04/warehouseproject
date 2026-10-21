@@ -18,7 +18,7 @@ const (
 	RoleKey     contextKey = "role"
 )
 
-// AuthMiddleware kiem tra JWT truoc khi cho phep truy cap API.
+// AuthMiddleware kiem tra Access Token truoc khi cho phep truy cap API.
 func AuthMiddleware(jwtSecret string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authHeader := r.Header.Get("Authorization")
@@ -61,6 +61,13 @@ func AuthMiddleware(jwtSecret string, next http.Handler) http.Handler {
 			return
 		}
 
+		// Chi chap nhan Access Token, khong chap nhan Refresh Token.
+		tokenType, typeOK := claims["token_type"].(string)
+		if !typeOK || tokenType != "access" {
+			writeUnauthorized(w, "Can su dung Access Token")
+			return
+		}
+
 		userID, ok := claims["user_id"].(float64)
 		username, usernameOK := claims["username"].(string)
 		role, roleOK := claims["role"].(string)
@@ -82,7 +89,7 @@ func AuthMiddleware(jwtSecret string, next http.Handler) http.Handler {
 }
 
 func writeUnauthorized(w http.ResponseWriter, message string) {
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(http.StatusUnauthorized)
 
 	_ = json.NewEncoder(w).Encode(map[string]string{
