@@ -1,4 +1,4 @@
-package main
+﻿package main
 
 import (
 	"encoding/json"
@@ -14,31 +14,31 @@ import (
 )
 
 func main() {
-	// Káº¿t ná»‘i PostgreSQL.
+	// Ket noi PostgreSQL.
 	db, err := database.ConnectDB()
 	if err != nil {
 		log.Fatal("Khong the ket noi database: ", err)
 	}
 	defer db.Close()
 
-	// Khá»Ÿi táº¡o dá»‹ch vá»¥ xÃ¡c thá»±c.
-	userRepo := repository.NewUserRepository(db)
-
+	// Cau hinh JWT.
 	jwtSecret := os.Getenv("JWT_SECRET")
 	if jwtSecret == "" {
 		log.Fatal("Hay cau hinh JWT_SECRET")
 	}
 
+	// Khoi tao repository va service xac thuc.
+	userRepo := repository.NewUserRepository(db)
 	userService := service.NewUserService(userRepo, jwtSecret)
 	authHandler := handler.NewAuthHandler(userService)
 
 	mux := http.NewServeMux()
 
-	// API Ä‘Äƒng nháº­p vÃ  lÃ m má»›i token.
+	// Dang nhap va lam moi token.
 	mux.HandleFunc("/api/login", authHandler.Login)
 	mux.HandleFunc("/api/refresh-token", authHandler.RefreshToken)
 
-	// API xem thÃ´ng tin tÃ i khoáº£n hiá»‡n táº¡i.
+	// Xem thong tin tai khoan dang dang nhap.
 	profileHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 
@@ -54,7 +54,7 @@ func main() {
 		middleware.AuthMiddleware(jwtSecret, profileHandler),
 	)
 
-	// API chá»‰ dÃ nh cho admin.
+	// API kiem tra quyen Admin.
 	adminHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]string{
@@ -70,7 +70,7 @@ func main() {
 		),
 	)
 
-	// Khá»Ÿi táº¡o Repository sáº£n pháº©m Ä‘á»ƒ sá»­ dá»¥ng á»Ÿ bÆ°á»›c CRUD.
+	// Khoi tao Repository va Handler san pham.
 	productRepo := repository.NewProductRepository(db)
 	productHandler := handler.NewProductHandler(productRepo)
 
@@ -84,6 +84,89 @@ func main() {
 		middleware.AuthMiddleware(jwtSecret, productHandler),
 	)
 
-	log.Println("API server dang chay tai http://localhost:8080")
-	log.Fatal(http.ListenAndServe(":8080", mux))
+	// Khoi tao Service va Handler quan ly nguoi dung.
+	userManagementService := service.NewUserManagementService(userRepo)
+	userHandler := handler.NewUserHandler(userManagementService)
+
+	// API quan ly nguoi dung chi danh cho Admin.
+	mux.Handle(
+		"/api/users",
+		middleware.AuthMiddleware(
+			jwtSecret,
+			middleware.RequireRole("admin")(
+				http.HandlerFunc(userHandler.Users),
+			),
+		),
+	)
+
+	mux.Handle(
+		"/api/users/",
+		middleware.AuthMiddleware(
+			jwtSecret,
+			middleware.RequireRole("admin")(
+				http.HandlerFunc(userHandler.UserByID),
+			),
+		),
+	)
+        // Khoi tao Handler quan ly danh muc.
+        categoryHandler := handler.NewCategoryHandler(db)
+
+        // Xem danh sach danh muc: can dang nhap.
+        mux.Handle("/api/categories", middleware.AuthMiddleware(jwtSecret,
+                http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+                        if r.Method != http.MethodGet {
+                                http.Error(w, `{"error":"Method khong duoc ho tro"}`, http.StatusMethodNotAllowed)
+                                return
+                        }
+                        categoryHandler.List(w, r)
+                }),
+        ))
+
+        // Xem chi tiet, sua va xoa danh muc: chi Admin.
+        mux.Handle("/api/categories/", middleware.AuthMiddleware(jwtSecret,
+                middleware.RequireRole("admin")(
+                        http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+                                switch r.Method {
+                                case http.MethodGet:
+                                        categoryHandler.GetByID(w, r)
+                                case http.MethodPut:
+                                        categoryHandler.Update(w, r)
+                                case http.MethodDelete:
+                                        categoryHandler.Delete(w, r)
+                                default:
+                                        http.Error(w, `{"error":"Method khong duoc ho tro"}`, http.StatusMethodNotAllowed)
+                                }
+                        }),
+                ),
+        ))
+
+        // Them danh muc: chi Admin.
+        mux.Handle("/api/categories/create", middleware.AuthMiddleware(jwtSecret,
+                middleware.RequireRole("admin")(
+                        http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+                                if r.Method != http.MethodPost {
+                                        http.Error(w, `{"error":"Method khong duoc ho tro"}`, http.StatusMethodNotAllowed)
+                                        return
+                                }
+                                categoryHandler.Create(w, r)
+                        }),
+                ),
+        ))
+
+		corsHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+    w.Header().Set("Access-Control-Allow-Origin", "http://localhost:5173")
+    w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+    w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
+    if r.Method == http.MethodOptions {
+        w.WriteHeader(http.StatusNoContent)
+        return
+    }
+
+    mux.ServeHTTP(w, r)
+})
+
+log.Println("API server dang chay tai http://localhost:8080")
+log.Fatal(http.ListenAndServe(":8080", corsHandler))
 }
+
