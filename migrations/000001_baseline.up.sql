@@ -1,0 +1,37 @@
+CREATE TABLE users (
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    username VARCHAR(50) NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    full_name VARCHAR(100) NOT NULL,
+    role VARCHAR(20) NOT NULL DEFAULT 'staff',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE categories (
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    name VARCHAR(100) NOT NULL UNIQUE,
+    description TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE products (
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    code VARCHAR(50) NOT NULL UNIQUE,
+    name VARCHAR(150) NOT NULL,
+    category_id BIGINT REFERENCES categories(id),
+    price NUMERIC(12,2) NOT NULL DEFAULT 0,
+    quantity INTEGER NOT NULL DEFAULT 0,
+    min_stock INTEGER NOT NULL DEFAULT 5,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE stock_transactions (
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    product_id BIGINT NOT NULL REFERENCES products(id),
+    user_id BIGINT NOT NULL REFERENCES users(id),
+    transaction_type VARCHAR(10) NOT NULL,
+    quantity INTEGER NOT NULL,
+    note TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
