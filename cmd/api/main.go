@@ -1,4 +1,4 @@
-﻿package main
+package main
 
 import (
 	"encoding/json"
@@ -108,65 +108,107 @@ func main() {
 			),
 		),
 	)
-        // Khoi tao Handler quan ly danh muc.
-        categoryHandler := handler.NewCategoryHandler(db)
 
-        // Xem danh sach danh muc: can dang nhap.
-        mux.Handle("/api/categories", middleware.AuthMiddleware(jwtSecret,
-                http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-                        if r.Method != http.MethodGet {
-                                http.Error(w, `{"error":"Method khong duoc ho tro"}`, http.StatusMethodNotAllowed)
-                                return
-                        }
-                        categoryHandler.List(w, r)
-                }),
-        ))
+	// Khoi tao Handler quan ly danh muc.
+	categoryHandler := handler.NewCategoryHandler(db)
 
-        // Xem chi tiet, sua va xoa danh muc: chi Admin.
-        mux.Handle("/api/categories/", middleware.AuthMiddleware(jwtSecret,
-                middleware.RequireRole("admin")(
-                        http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-                                switch r.Method {
-                                case http.MethodGet:
-                                        categoryHandler.GetByID(w, r)
-                                case http.MethodPut:
-                                        categoryHandler.Update(w, r)
-                                case http.MethodDelete:
-                                        categoryHandler.Delete(w, r)
-                                default:
-                                        http.Error(w, `{"error":"Method khong duoc ho tro"}`, http.StatusMethodNotAllowed)
-                                }
-                        }),
-                ),
-        ))
+	// Xem danh sach danh muc: can dang nhap.
+	mux.Handle(
+		"/api/categories",
+		middleware.AuthMiddleware(jwtSecret,
+			http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != http.MethodGet {
+					http.Error(w, `{"error":"Method khong duoc ho tro"}`, http.StatusMethodNotAllowed)
+					return
+				}
+				categoryHandler.List(w, r)
+			}),
+		),
+	)
 
-        // Them danh muc: chi Admin.
-        mux.Handle("/api/categories/create", middleware.AuthMiddleware(jwtSecret,
-                middleware.RequireRole("admin")(
-                        http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-                                if r.Method != http.MethodPost {
-                                        http.Error(w, `{"error":"Method khong duoc ho tro"}`, http.StatusMethodNotAllowed)
-                                        return
-                                }
-                                categoryHandler.Create(w, r)
-                        }),
-                ),
-        ))
+	// Xem chi tiet, sua va xoa danh muc: chi Admin.
+	mux.Handle(
+		"/api/categories/",
+		middleware.AuthMiddleware(jwtSecret,
+			middleware.RequireRole("admin")(
+				http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					switch r.Method {
+					case http.MethodGet:
+						categoryHandler.GetByID(w, r)
+					case http.MethodPut:
+						categoryHandler.Update(w, r)
+					case http.MethodDelete:
+						categoryHandler.Delete(w, r)
+					default:
+						http.Error(w, `{"error":"Method khong duoc ho tro"}`, http.StatusMethodNotAllowed)
+					}
+				}),
+			),
+		),
+	)
 
-		corsHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-    w.Header().Set("Access-Control-Allow-Origin", "http://localhost:5173")
-    w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-    w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+	// Them danh muc: chi Admin.
+	mux.Handle(
+		"/api/categories/create",
+		middleware.AuthMiddleware(jwtSecret,
+			middleware.RequireRole("admin")(
+				http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					if r.Method != http.MethodPost {
+						http.Error(w, `{"error":"Method khong duoc ho tro"}`, http.StatusMethodNotAllowed)
+						return
+					}
+					categoryHandler.Create(w, r)
+				}),
+			),
+		),
+	)
 
-    if r.Method == http.MethodOptions {
-        w.WriteHeader(http.StatusNoContent)
-        return
-    }
+	// Khoi tao Repository va Handler giao dich kho.
+	stockRepo := repository.NewStockRepository(db)
+	stockHandler := handler.NewStockHandler(stockRepo)
 
-    mux.ServeHTTP(w, r)
-})
+	// API nhap kho, xuat kho va xem lich su: yeu cau dang nhap.
+	mux.Handle(
+		"/api/stock/",
+		middleware.AuthMiddleware(jwtSecret, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			switch r.URL.Path {
+			case "/api/stock/import":
+				stockHandler.Import(w, r)
+			case "/api/stock/export":
+				stockHandler.Export(w, r)
+			case "/api/stock/transactions":
+				stockHandler.List(w, r)
+			default:
+				http.NotFound(w, r)
+			}
+		})),
+	)
+	// Cau hinh CORS cho cac cong frontend Vite.
+	allowedOrigins := map[string]bool{
+		"http://localhost:5173": true,
+		"http://localhost:5174": true,
+		"http://localhost:5175": true,
+	}
 
-log.Println("API server dang chay tai http://localhost:8080")
-log.Fatal(http.ListenAndServe(":8080", corsHandler))
+	corsHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		origin := r.Header.Get("Origin")
+
+		if allowedOrigins[origin] {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Vary", "Origin")
+		}
+
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+
+		mux.ServeHTTP(w, r)
+	})
+
+	log.Println("API server dang chay tai http://localhost:8080")
+	log.Fatal(http.ListenAndServe(":8080", corsHandler))
 }
-

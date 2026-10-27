@@ -1,4 +1,3 @@
-
 package repository
 
 import (
@@ -184,4 +183,48 @@ func (r *ProductRepository) Delete(
 // IsNotFound kiểm tra lỗi không tìm thấy dữ liệu.
 func IsNotFound(err error) bool {
 	return errors.Is(err, pgx.ErrNoRows)
+}
+
+// GetLowStock lay cac san pham co so luong ton kho khong vuot muc toi thieu.
+func (r *ProductRepository) GetLowStock(ctx context.Context) ([]model.Product, error) {
+	query := `
+        SELECT id, code, name, category_id, price,
+               quantity, min_stock, created_at, updated_at
+        FROM products
+        WHERE quantity <= min_stock
+        ORDER BY quantity ASC, id ASC
+    `
+
+	rows, err := r.DB.Query(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	products := make([]model.Product, 0)
+
+	for rows.Next() {
+		var product model.Product
+		if err := rows.Scan(
+			&product.ID,
+			&product.Code,
+			&product.Name,
+			&product.CategoryID,
+			&product.Price,
+			&product.Quantity,
+			&product.MinStock,
+			&product.CreatedAt,
+			&product.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+
+		products = append(products, product)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return products, nil
 }

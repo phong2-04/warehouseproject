@@ -11,7 +11,7 @@ import (
 	"warehouseproject/internal/repository"
 )
 
-// ProductHandler xử lý các API sản phẩm.
+// ProductHandler xá»­ lÃ½ cÃ¡c API sáº£n pháº©m.
 type ProductHandler struct {
 	ProductRepo *repository.ProductRepository
 }
@@ -23,13 +23,15 @@ func NewProductHandler(repo *repository.ProductRepository) *ProductHandler {
 func (h *ProductHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	path := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/products"), "/")
 
-	// Chỉ admin được thêm, sửa hoặc xóa sản phẩm.
+	// Chá»‰ admin Ä‘Æ°á»£c thÃªm, sá»­a hoáº·c xÃ³a sáº£n pháº©m.
 	role, _ := r.Context().Value(middleware.RoleKey).(string)
 
 	switch r.Method {
 	case http.MethodGet:
 		if path == "" {
 			h.GetAll(w, r)
+		} else if path == "low-stock" {
+			h.GetLowStock(w, r)
 		} else {
 			h.GetByID(w, r, path)
 		}
@@ -181,4 +183,15 @@ func writeProductJSON(w http.ResponseWriter, status int, data interface{}) {
 
 func writeProductError(w http.ResponseWriter, status int, message string) {
 	writeProductJSON(w, status, map[string]string{"error": message})
+}
+
+// GetLowStock tra ve danh sach san pham ton kho thap.
+func (h *ProductHandler) GetLowStock(w http.ResponseWriter, r *http.Request) {
+	products, err := h.ProductRepo.GetLowStock(r.Context())
+	if err != nil {
+		writeProductError(w, http.StatusInternalServerError, "Khong the lay danh sach san pham ton kho thap")
+		return
+	}
+
+	writeProductJSON(w, http.StatusOK, products)
 }
