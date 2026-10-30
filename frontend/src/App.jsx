@@ -611,14 +611,18 @@ const [stockForm, setStockForm] = useState({
                   <td>
                     <span
                       className={`status ${
-                        product.quantity <= product.min_stock
-                          ? 'low'
-                          : 'available'
+                        Number(product.quantity) === 0
+                          ? 'out'
+                          : Number(product.quantity) <= Number(product.min_stock)
+                            ? 'low'
+                            : 'available'
                       }`}
                     >
-                      {product.quantity <= product.min_stock
-                        ? 'Sắp hết hàng'
-                        : 'Còn hàng'}
+                      {Number(product.quantity) === 0
+                        ? 'Hết hàng'
+                        : Number(product.quantity) <= Number(product.min_stock)
+                          ? 'Cần nhập thêm'
+                          : 'Còn hàng'}
                     </span>
                   </td>
                   {isAdmin && (
