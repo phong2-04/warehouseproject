@@ -1,4 +1,3 @@
-
 package service
 
 import (
@@ -37,7 +36,6 @@ type LoginResponse struct {
 	User         *model.User `json:"user"`
 }
 
-// NewUserService khởi tạo service xử lý đăng nhập.
 func NewUserService(
 	userRepo *repository.UserRepository,
 	jwtSecret string,
@@ -48,7 +46,7 @@ func NewUserService(
 	}
 }
 
-// Tạo JWT theo loại token và thời hạn tương ứng.
+// Tao JWT theo loai token.
 func (s *UserService) generateToken(
 	user *model.User,
 	tokenType string,
@@ -69,7 +67,7 @@ func (s *UserService) generateToken(
 	return token.SignedString(s.JWTSecret)
 }
 
-// Login kiểm tra tài khoản và tạo Access Token, Refresh Token.
+// Login kiem tra tai khoan va tao Access Token, Refresh Token.
 func (s *UserService) Login(
 	ctx context.Context,
 	username string,
@@ -123,8 +121,9 @@ func (s *UserService) Login(
 	}, nil
 }
 
-// RefreshAccessToken xác minh Refresh Token và cấp Access Token mới.
+// RefreshAccessToken kiem tra lai tai khoan trong DB truoc khi cap token moi.
 func (s *UserService) RefreshAccessToken(
+	ctx context.Context,
 	refreshToken string,
 ) (string, error) {
 	if len(s.JWTSecret) == 0 {
@@ -139,8 +138,9 @@ func (s *UserService) RefreshAccessToken(
 			}
 			return s.JWTSecret, nil
 		},
+		jwt.WithValidMethods([]string{"HS256"}),
 	)
-	if err != nil || !parsedToken.Valid {
+	if err != nil || parsedToken == nil || !parsedToken.Valid {
 		return "", ErrInvalidRefreshToken
 	}
 
@@ -154,31 +154,24 @@ func (s *UserService) RefreshAccessToken(
 		return "", ErrInvalidRefreshToken
 	}
 
-	userID, ok := claims["user_id"].(float64)
-	if !ok {
+	userIDValue, ok := claims["user_id"].(float64)
+	if !ok || userIDValue <= 0 || userIDValue != float64(int64(userIDValue)) {
 		return "", ErrInvalidRefreshToken
 	}
 
-	username, ok := claims["username"].(string)
-	if !ok || username == "" {
-		return "", ErrInvalidRefreshToken
+	// Kiem tra tai khoan con ton tai trong database.
+	user, err := s.UserRepo.GetByID(ctx, int64(userIDValue))
+	if err != nil {
+		if errors.Is(err, repository.ErrUserNotFound) {
+			return "", ErrInvalidRefreshToken
+		}
+		return "", err
 	}
 
-	role, ok := claims["role"].(string)
-	if !ok || role == "" {
-		return "", ErrInvalidRefreshToken
-	}
-
-	now := time.Now()
-	newClaims := jwt.MapClaims{
-		"user_id":    int64(userID),
-		"username":   username,
-		"role":       role,
-		"token_type": "access",
-		"iat":        now.Unix(),
-		"exp":        now.Add(AccessTokenDuration).Unix(),
-	}
-
-	newToken := jwt.NewWithClaims(jwt.SigningMethodHS256, newClaims)
-	return newToken.SignedString(s.JWTSecret)
+	// Tao Access Token voi username va role moi nhat trong database.
+	return s.generateToken(
+		user,
+		"access",
+		AccessTokenDuration,
+	)
 }

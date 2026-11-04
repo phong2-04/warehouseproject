@@ -23,8 +23,8 @@ func main() {
 
 	// Cau hinh JWT.
 	jwtSecret := os.Getenv("JWT_SECRET")
-	if jwtSecret == "" {
-		log.Fatal("Hay cau hinh JWT_SECRET")
+	if len([]byte(jwtSecret)) < 32 {
+		log.Fatal("JWT_SECRET phai co it nhat 32 byte")
 	}
 
 	// Khoi tao repository va service xac thuc.
@@ -51,7 +51,7 @@ func main() {
 
 	mux.Handle(
 		"/api/profile",
-		middleware.AuthMiddleware(jwtSecret, profileHandler),
+		middleware.AuthMiddleware(jwtSecret, userRepo, profileHandler),
 	)
 
 	// API kiem tra quyen Admin.
@@ -64,8 +64,7 @@ func main() {
 
 	mux.Handle(
 		"/api/admin",
-		middleware.AuthMiddleware(
-			jwtSecret,
+		middleware.AuthMiddleware(jwtSecret, userRepo,
 			middleware.RequireRole("admin")(adminHandler),
 		),
 	)
@@ -77,11 +76,11 @@ func main() {
 	// API san pham yeu cau dang nhap.
 	mux.Handle(
 		"/api/products",
-		middleware.AuthMiddleware(jwtSecret, productHandler),
+		middleware.AuthMiddleware(jwtSecret, userRepo, productHandler),
 	)
 	mux.Handle(
 		"/api/products/",
-		middleware.AuthMiddleware(jwtSecret, productHandler),
+		middleware.AuthMiddleware(jwtSecret, userRepo, productHandler),
 	)
 
 	// Khoi tao Service va Handler quan ly nguoi dung.
@@ -91,8 +90,7 @@ func main() {
 	// API quan ly nguoi dung chi danh cho Admin.
 	mux.Handle(
 		"/api/users",
-		middleware.AuthMiddleware(
-			jwtSecret,
+		middleware.AuthMiddleware(jwtSecret, userRepo,
 			middleware.RequireRole("admin")(
 				http.HandlerFunc(userHandler.Users),
 			),
@@ -101,8 +99,7 @@ func main() {
 
 	mux.Handle(
 		"/api/users/",
-		middleware.AuthMiddleware(
-			jwtSecret,
+		middleware.AuthMiddleware(jwtSecret, userRepo,
 			middleware.RequireRole("admin")(
 				http.HandlerFunc(userHandler.UserByID),
 			),
@@ -115,7 +112,7 @@ func main() {
 	// Xem danh sach danh muc: can dang nhap.
 	mux.Handle(
 		"/api/categories",
-		middleware.AuthMiddleware(jwtSecret,
+		middleware.AuthMiddleware(jwtSecret, userRepo,
 			http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				if r.Method != http.MethodGet {
 					http.Error(w, `{"error":"Method khong duoc ho tro"}`, http.StatusMethodNotAllowed)
@@ -129,7 +126,7 @@ func main() {
 	// Xem chi tiet, sua va xoa danh muc: chi Admin.
 	mux.Handle(
 		"/api/categories/",
-		middleware.AuthMiddleware(jwtSecret,
+		middleware.AuthMiddleware(jwtSecret, userRepo,
 			middleware.RequireRole("admin")(
 				http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					switch r.Method {
@@ -150,7 +147,7 @@ func main() {
 	// Them danh muc: chi Admin.
 	mux.Handle(
 		"/api/categories/create",
-		middleware.AuthMiddleware(jwtSecret,
+		middleware.AuthMiddleware(jwtSecret, userRepo,
 			middleware.RequireRole("admin")(
 				http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					if r.Method != http.MethodPost {
@@ -170,7 +167,7 @@ func main() {
 	// API nhap kho, xuat kho va xem lich su: yeu cau dang nhap.
 	mux.Handle(
 		"/api/stock/",
-		middleware.AuthMiddleware(jwtSecret, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		middleware.AuthMiddleware(jwtSecret, userRepo, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			switch r.URL.Path {
 			case "/api/stock/import":
 				stockHandler.Import(w, r)

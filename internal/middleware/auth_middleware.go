@@ -1,11 +1,14 @@
-
 package middleware
 
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"log"
 	"net/http"
 	"strings"
+
+	"warehouseproject/internal/repository"
 
 	"github.com/golang-jwt/jwt/v5"
 )
@@ -18,12 +21,15 @@ const (
 	RoleKey     contextKey = "role"
 )
 
-// AuthMiddleware kiem tra Access Token truoc khi cho phep truy cap API.
-func AuthMiddleware(jwtSecret string, next http.Handler) http.Handler {
+// AuthMiddleware xac thuc Access Token va kiem tra tai khoan trong DB.
+func AuthMiddleware(
+	jwtSecret string,
+	userRepo *repository.UserRepository,
+	next http.Handler,
+) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authHeader := r.Header.Get("Authorization")
 
-		// Yeu cau token theo dinh dang Bearer.
 		if !strings.HasPrefix(authHeader, "Bearer ") {
 			writeUnauthorized(w, "Thieu token xac thuc")
 			return
@@ -38,7 +44,6 @@ func AuthMiddleware(jwtSecret string, next http.Handler) http.Handler {
 			return
 		}
 
-		// Xac minh chu ky va thoi han cua JWT.
 		token, err := jwt.Parse(
 			tokenString,
 			func(token *jwt.Token) (interface{}, error) {
@@ -61,28 +66,35 @@ func AuthMiddleware(jwtSecret string, next http.Handler) http.Handler {
 			return
 		}
 
-		// Chi chap nhan Access Token, khong chap nhan Refresh Token.
-		tokenType, typeOK := claims["token_type"].(string)
-		if !typeOK || tokenType != "access" {
+		tokenType, ok := claims["token_type"].(string)
+		if !ok || tokenType != "access" {
 			writeUnauthorized(w, "Can su dung Access Token")
 			return
 		}
 
 		userID, ok := claims["user_id"].(float64)
-		username, usernameOK := claims["username"].(string)
-		role, roleOK := claims["role"].(string)
-
-		if !ok || userID <= 0 ||
-			!usernameOK || username == "" ||
-			!roleOK || role == "" {
-			writeUnauthorized(w, "Thieu thong tin nguoi dung")
+		if !ok || userID <= 0 || userID != float64(int64(userID)) {
+			writeUnauthorized(w, "Thong tin nguoi dung khong hop le")
 			return
 		}
 
-		// Luu thong tin user de handler tiep theo su dung.
-		ctx := context.WithValue(r.Context(), UserIDKey, int64(userID))
-		ctx = context.WithValue(ctx, UsernameKey, username)
-		ctx = context.WithValue(ctx, RoleKey, role)
+		// Kiem tra tai khoan va quyen hien tai trong database.
+		user, err := userRepo.GetByID(r.Context(), int64(userID))
+		if err != nil {
+			if errors.Is(err, repository.ErrUserNotFound) {
+				writeUnauthorized(w, "Tai khoan khong con ton tai")
+				return
+			}
+
+			log.Printf("Loi kiem tra tai khoan trong AuthMiddleware: %v", err)
+			writeInternalServerError(w)
+			return
+		}
+
+		// Khong su dung username va role cu trong JWT.
+		ctx := context.WithValue(r.Context(), UserIDKey, user.ID)
+		ctx = context.WithValue(ctx, UsernameKey, user.Username)
+		ctx = context.WithValue(ctx, RoleKey, user.Role)
 
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
@@ -94,5 +106,14 @@ func writeUnauthorized(w http.ResponseWriter, message string) {
 
 	_ = json.NewEncoder(w).Encode(map[string]string{
 		"error": message,
+	})
+}
+
+func writeInternalServerError(w http.ResponseWriter) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(http.StatusInternalServerError)
+
+	_ = json.NewEncoder(w).Encode(map[string]string{
+		"error": "Loi kiem tra xac thuc",
 	})
 }

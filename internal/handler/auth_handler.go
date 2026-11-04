@@ -1,4 +1,3 @@
-
 package handler
 
 import (
@@ -29,7 +28,7 @@ func NewAuthHandler(userService *service.UserService) *AuthHandler {
 	}
 }
 
-// Login tiếp nhận yêu cầu đăng nhập và trả về hai loại token.
+// Login tiáº¿p nháº­n yÃªu cáº§u Ä‘Äƒng nháº­p vÃ  tráº£ vá» hai loáº¡i token.
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 
@@ -88,7 +87,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, result)
 }
 
-// RefreshToken cấp Access Token mới từ Refresh Token hợp lệ.
+// RefreshToken cáº¥p Access Token má»›i tá»« Refresh Token há»£p lá»‡.
 func (h *AuthHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 
@@ -118,7 +117,7 @@ func (h *AuthHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	accessToken, err := h.UserService.RefreshAccessToken(req.RefreshToken)
+	accessToken, err := h.UserService.RefreshAccessToken(r.Context(), req.RefreshToken)
 	if err != nil {
 		if errors.Is(err, service.ErrJWTSecretRequired) {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{

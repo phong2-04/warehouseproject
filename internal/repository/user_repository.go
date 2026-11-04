@@ -10,7 +10,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-var ErrUserNotFound = errors.New("khong tim thay nguoi dung")
+var (
+	ErrUserNotFound = errors.New("khong tim thay nguoi dung")
+	ErrLastAdmin    = errors.New("khong the xoa hoac ha quyen admin cuoi cung")
+)
 
 type UserRepository struct {
 	DB *pgxpool.Pool
@@ -26,10 +29,10 @@ func (r *UserRepository) GetByUsername(
 	username string,
 ) (*model.User, error) {
 	query := `
-		SELECT id, username, password_hash, full_name, role
-		FROM users
-		WHERE username = $1
-	`
+        SELECT id, username, password_hash, full_name, role
+        FROM users
+        WHERE username = $1
+    `
 
 	user := &model.User{}
 	err := r.DB.QueryRow(ctx, query, username).Scan(
@@ -54,10 +57,10 @@ func (r *UserRepository) GetAll(
 	ctx context.Context,
 ) ([]model.User, error) {
 	query := `
-		SELECT id, username, password_hash, full_name, role
-		FROM users
-		ORDER BY id
-	`
+        SELECT id, username, password_hash, full_name, role
+        FROM users
+        ORDER BY id
+    `
 
 	rows, err := r.DB.Query(ctx, query)
 	if err != nil {
@@ -94,10 +97,10 @@ func (r *UserRepository) GetByID(
 	id int64,
 ) (*model.User, error) {
 	query := `
-		SELECT id, username, password_hash, full_name, role
-		FROM users
-		WHERE id = $1
-	`
+        SELECT id, username, password_hash, full_name, role
+        FROM users
+        WHERE id = $1
+    `
 
 	var user model.User
 	err := r.DB.QueryRow(ctx, query, id).Scan(
@@ -123,10 +126,10 @@ func (r *UserRepository) Create(
 	user *model.User,
 ) error {
 	query := `
-		INSERT INTO users (username, password_hash, full_name, role)
-		VALUES ($1, $2, $3, $4)
-		RETURNING id
-	`
+        INSERT INTO users (username, password_hash, full_name, role)
+        VALUES ($1, $2, $3, $4)
+        RETURNING id
+    `
 
 	return r.DB.QueryRow(
 		ctx,
@@ -143,15 +146,51 @@ func (r *UserRepository) Update(
 	ctx context.Context,
 	user *model.User,
 ) error {
-	query := `
-		UPDATE users
-		SET username = $1, full_name = $2, role = $3
-		WHERE id = $4
-	`
+	tx, err := r.DB.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
 
-	result, err := r.DB.Exec(
+	// Khoa cac tai khoan admin de tranh hai yeu cau
+	// dong thoi cung ha quyen admin cuoi cung.
+	rows, err := tx.Query(
 		ctx,
-		query,
+		`SELECT id FROM users WHERE role = 'admin' ORDER BY id FOR UPDATE`,
+	)
+	if err != nil {
+		return err
+	}
+
+	adminIDs := make(map[int64]bool)
+
+	for rows.Next() {
+		var adminID int64
+		if err := rows.Scan(&adminID); err != nil {
+			rows.Close()
+			return err
+		}
+		adminIDs[adminID] = true
+	}
+
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
+	rows.Close()
+
+	// Khong cho ha quyen admin cuoi cung.
+	if adminIDs[user.ID] && user.Role != "admin" && len(adminIDs) <= 1 {
+		return ErrLastAdmin
+	}
+
+	result, err := tx.Exec(
+		ctx,
+		`
+            UPDATE users
+            SET username = $1, full_name = $2, role = $3
+            WHERE id = $4
+        `,
 		user.Username,
 		user.FullName,
 		user.Role,
@@ -165,7 +204,7 @@ func (r *UserRepository) Update(
 		return ErrUserNotFound
 	}
 
-	return nil
+	return tx.Commit(ctx)
 }
 
 // Xoa tai khoan theo ID.
@@ -173,7 +212,44 @@ func (r *UserRepository) Delete(
 	ctx context.Context,
 	id int64,
 ) error {
-	result, err := r.DB.Exec(
+	tx, err := r.DB.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	// Khoa cac tai khoan admin truoc khi kiem tra.
+	rows, err := tx.Query(
+		ctx,
+		`SELECT id FROM users WHERE role = 'admin' ORDER BY id FOR UPDATE`,
+	)
+	if err != nil {
+		return err
+	}
+
+	adminIDs := make(map[int64]bool)
+
+	for rows.Next() {
+		var adminID int64
+		if err := rows.Scan(&adminID); err != nil {
+			rows.Close()
+			return err
+		}
+		adminIDs[adminID] = true
+	}
+
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
+	rows.Close()
+
+	// Khong cho xoa admin cuoi cung.
+	if adminIDs[id] && len(adminIDs) <= 1 {
+		return ErrLastAdmin
+	}
+
+	result, err := tx.Exec(
 		ctx,
 		`DELETE FROM users WHERE id = $1`,
 		id,
@@ -186,5 +262,5 @@ func (r *UserRepository) Delete(
 		return ErrUserNotFound
 	}
 
-	return nil
+	return tx.Commit(ctx)
 }

@@ -3,7 +3,6 @@ package repository
 import (
 	"context"
 	"errors"
-	"time"
 
 	"warehouseproject/internal/model"
 
@@ -11,7 +10,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// ProductRepository xử lý truy vấn sản phẩm trong PostgreSQL.
 type ProductRepository struct {
 	DB *pgxpool.Pool
 }
@@ -20,17 +18,16 @@ func NewProductRepository(db *pgxpool.Pool) *ProductRepository {
 	return &ProductRepository{DB: db}
 }
 
-// Create thêm sản phẩm mới.
 func (r *ProductRepository) Create(
 	ctx context.Context,
 	product *model.Product,
 ) error {
 	query := `
-		INSERT INTO products
-			(code, name, category_id, price, quantity, min_stock)
-		VALUES ($1, $2, $3, $4, $5, $6)
-		RETURNING id, created_at, updated_at
-	`
+        INSERT INTO products
+            (code, name, category_id, price, quantity, min_stock)
+        VALUES ($1, $2, $3, $4, $5, $6)
+        RETURNING id, created_at, updated_at
+    `
 
 	return r.DB.QueryRow(
 		ctx,
@@ -48,16 +45,15 @@ func (r *ProductRepository) Create(
 	)
 }
 
-// GetAll lấy danh sách sản phẩm.
 func (r *ProductRepository) GetAll(
 	ctx context.Context,
 ) ([]model.Product, error) {
 	query := `
-		SELECT id, code, name, category_id, price,
-		       quantity, min_stock, created_at, updated_at
-		FROM products
-		ORDER BY id
-	`
+        SELECT id, code, name, category_id, price,
+               quantity, min_stock, created_at, updated_at
+        FROM products
+        ORDER BY id
+    `
 
 	rows, err := r.DB.Query(ctx, query)
 	if err != nil {
@@ -95,17 +91,16 @@ func (r *ProductRepository) GetAll(
 	return products, nil
 }
 
-// GetByID lấy một sản phẩm theo ID.
 func (r *ProductRepository) GetByID(
 	ctx context.Context,
 	id int64,
 ) (*model.Product, error) {
 	query := `
-		SELECT id, code, name, category_id, price,
-		       quantity, min_stock, created_at, updated_at
-		FROM products
-		WHERE id = $1
-	`
+        SELECT id, code, name, category_id, price,
+               quantity, min_stock, created_at, updated_at
+        FROM products
+        WHERE id = $1
+    `
 
 	var product model.Product
 
@@ -127,23 +122,23 @@ func (r *ProductRepository) GetByID(
 	return &product, nil
 }
 
-// Update cập nhật thông tin sản phẩm.
+// Update chỉ cập nhật thông tin sản phẩm, không cập nhật số lượng tồn kho.
 func (r *ProductRepository) Update(
 	ctx context.Context,
 	product *model.Product,
 ) error {
 	query := `
-		UPDATE products
-		SET code = $1,
-		    name = $2,
-		    category_id = $3,
-		    price = $4,
-		    quantity = $5,
-		    min_stock = $6,
-		    updated_at = $7
-		WHERE id = $8
-		RETURNING updated_at
-	`
+        UPDATE products
+        SET code = $1,
+            name = $2,
+            category_id = $3,
+            price = $4,
+            min_stock = $5,
+            updated_at = NOW()
+        WHERE id = $6
+        RETURNING id, code, name, category_id, price,
+                  quantity, min_stock, created_at, updated_at
+    `
 
 	return r.DB.QueryRow(
 		ctx,
@@ -152,14 +147,21 @@ func (r *ProductRepository) Update(
 		product.Name,
 		product.CategoryID,
 		product.Price,
-		product.Quantity,
 		product.MinStock,
-		time.Now(),
 		product.ID,
-	).Scan(&product.UpdatedAt)
+	).Scan(
+		&product.ID,
+		&product.Code,
+		&product.Name,
+		&product.CategoryID,
+		&product.Price,
+		&product.Quantity,
+		&product.MinStock,
+		&product.CreatedAt,
+		&product.UpdatedAt,
+	)
 }
 
-// Delete xóa sản phẩm theo ID.
 func (r *ProductRepository) Delete(
 	ctx context.Context,
 	id int64,
@@ -180,13 +182,13 @@ func (r *ProductRepository) Delete(
 	return nil
 }
 
-// IsNotFound kiểm tra lỗi không tìm thấy dữ liệu.
 func IsNotFound(err error) bool {
 	return errors.Is(err, pgx.ErrNoRows)
 }
 
-// GetLowStock lay cac san pham co so luong ton kho khong vuot muc toi thieu.
-func (r *ProductRepository) GetLowStock(ctx context.Context) ([]model.Product, error) {
+func (r *ProductRepository) GetLowStock(
+	ctx context.Context,
+) ([]model.Product, error) {
 	query := `
         SELECT id, code, name, category_id, price,
                quantity, min_stock, created_at, updated_at
@@ -205,6 +207,7 @@ func (r *ProductRepository) GetLowStock(ctx context.Context) ([]model.Product, e
 
 	for rows.Next() {
 		var product model.Product
+
 		if err := rows.Scan(
 			&product.ID,
 			&product.Code,
