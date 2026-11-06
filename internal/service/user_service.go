@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"time"
 
@@ -36,6 +38,13 @@ type LoginResponse struct {
 	User         *model.User `json:"user"`
 }
 
+type RefreshResponse struct {
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token"`
+	TokenType    string `json:"token_type"`
+	ExpiresIn    int64  `json:"expires_in"`
+}
+
 func NewUserService(
 	userRepo *repository.UserRepository,
 	jwtSecret string,
@@ -67,7 +76,13 @@ func (s *UserService) generateToken(
 	return token.SignedString(s.JWTSecret)
 }
 
-// Login kiem tra tai khoan va tao Access Token, Refresh Token.
+// Tao SHA-256 hash cua Refresh Token de luu trong database.
+func hashRefreshToken(token string) string {
+	hash := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(hash[:])
+}
+
+// Login kiem tra tai khoan va luu Refresh Token vao database.
 func (s *UserService) Login(
 	ctx context.Context,
 	username string,
@@ -112,6 +127,16 @@ func (s *UserService) Login(
 		return nil, err
 	}
 
+	err = s.UserRepo.CreateRefreshToken(
+		ctx,
+		user.ID,
+		hashRefreshToken(refreshToken),
+		time.Now().Add(RefreshTokenDuration),
+	)
+	if err != nil {
+		return nil, err
+	}
+
 	return &LoginResponse{
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken,
@@ -121,13 +146,12 @@ func (s *UserService) Login(
 	}, nil
 }
 
-// RefreshAccessToken kiem tra lai tai khoan trong DB truoc khi cap token moi.
-func (s *UserService) RefreshAccessToken(
-	ctx context.Context,
+// Kiem tra chu ky, loai va user ID cua Refresh Token.
+func (s *UserService) parseRefreshToken(
 	refreshToken string,
-) (string, error) {
+) (int64, error) {
 	if len(s.JWTSecret) == 0 {
-		return "", ErrJWTSecretRequired
+		return 0, ErrJWTSecretRequired
 	}
 
 	parsedToken, err := jwt.Parse(
@@ -141,37 +165,103 @@ func (s *UserService) RefreshAccessToken(
 		jwt.WithValidMethods([]string{"HS256"}),
 	)
 	if err != nil || parsedToken == nil || !parsedToken.Valid {
-		return "", ErrInvalidRefreshToken
+		return 0, ErrInvalidRefreshToken
 	}
 
 	claims, ok := parsedToken.Claims.(jwt.MapClaims)
 	if !ok {
-		return "", ErrInvalidRefreshToken
+		return 0, ErrInvalidRefreshToken
 	}
 
 	tokenType, ok := claims["token_type"].(string)
 	if !ok || tokenType != "refresh" {
-		return "", ErrInvalidRefreshToken
+		return 0, ErrInvalidRefreshToken
 	}
 
 	userIDValue, ok := claims["user_id"].(float64)
 	if !ok || userIDValue <= 0 || userIDValue != float64(int64(userIDValue)) {
-		return "", ErrInvalidRefreshToken
+		return 0, ErrInvalidRefreshToken
 	}
 
-	// Kiem tra tai khoan con ton tai trong database.
-	user, err := s.UserRepo.GetByID(ctx, int64(userIDValue))
+	return int64(userIDValue), nil
+}
+
+// Refresh Token rotation: thu hoi token cu va cap cap token moi.
+func (s *UserService) RefreshAccessToken(
+	ctx context.Context,
+	refreshToken string,
+) (*RefreshResponse, error) {
+	userID, err := s.parseRefreshToken(refreshToken)
+	if err != nil {
+		return nil, err
+	}
+
+	user, err := s.UserRepo.GetByID(ctx, userID)
 	if err != nil {
 		if errors.Is(err, repository.ErrUserNotFound) {
-			return "", ErrInvalidRefreshToken
+			return nil, ErrInvalidRefreshToken
 		}
-		return "", err
+		return nil, err
 	}
 
-	// Tao Access Token voi username va role moi nhat trong database.
-	return s.generateToken(
+	accessToken, err := s.generateToken(
 		user,
 		"access",
 		AccessTokenDuration,
 	)
+	if err != nil {
+		return nil, err
+	}
+
+	newRefreshToken, err := s.generateToken(
+		user,
+		"refresh",
+		RefreshTokenDuration,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	err = s.UserRepo.RotateRefreshToken(
+		ctx,
+		user.ID,
+		hashRefreshToken(refreshToken),
+		hashRefreshToken(newRefreshToken),
+		time.Now().Add(RefreshTokenDuration),
+	)
+	if err != nil {
+		if errors.Is(err, repository.ErrRefreshTokenNotFound) {
+			return nil, ErrInvalidRefreshToken
+		}
+		return nil, err
+	}
+
+	return &RefreshResponse{
+		AccessToken:  accessToken,
+		RefreshToken: newRefreshToken,
+		TokenType:    "Bearer",
+		ExpiresIn:    int64(AccessTokenDuration.Seconds()),
+	}, nil
+}
+
+// Logout thu hoi Refresh Token hien tai.
+func (s *UserService) Logout(
+	ctx context.Context,
+	refreshToken string,
+) error {
+	userID, err := s.parseRefreshToken(refreshToken)
+	if err != nil {
+		return err
+	}
+
+	err = s.UserRepo.RevokeRefreshToken(
+		ctx,
+		userID,
+		hashRefreshToken(refreshToken),
+	)
+	if errors.Is(err, repository.ErrRefreshTokenNotFound) {
+		return ErrInvalidRefreshToken
+	}
+
+	return err
 }

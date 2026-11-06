@@ -30,10 +30,8 @@ func writeUserJSON(w http.ResponseWriter, status int, data any) {
 	_ = json.NewEncoder(w).Encode(data)
 }
 
-func decodeUserJSON(r *http.Request, dst any) error {
-	decoder := json.NewDecoder(r.Body)
-	decoder.DisallowUnknownFields()
-	return decoder.Decode(dst)
+func decodeUserJSON(w http.ResponseWriter, r *http.Request, dst any) error {
+	return decodeJSONBody(w, r, dst, 256*1024, true)
 }
 
 // Kiem tra ma loi PostgreSQL.
@@ -63,7 +61,13 @@ func (h *UserHandler) Users(w http.ResponseWriter, r *http.Request) {
 			Role     string `json:"role"`
 		}
 
-		if err := decodeUserJSON(r, &req); err != nil {
+		if err := decodeUserJSON(w, r, &req); err != nil {
+			if isRequestBodyTooLarge(err) {
+				writeUserJSON(w, http.StatusRequestEntityTooLarge,
+					map[string]string{"error": "Request body qua lon"})
+				return
+			}
+
 			writeUserJSON(w, http.StatusBadRequest,
 				map[string]string{"error": "JSON khong hop le"})
 			return
@@ -120,7 +124,13 @@ func (h *UserHandler) UserByID(w http.ResponseWriter, r *http.Request) {
 			Role     string `json:"role"`
 		}
 
-		if err := decodeUserJSON(r, &req); err != nil {
+		if err := decodeUserJSON(w, r, &req); err != nil {
+			if isRequestBodyTooLarge(err) {
+				writeUserJSON(w, http.StatusRequestEntityTooLarge,
+					map[string]string{"error": "Request body qua lon"})
+				return
+			}
+
 			writeUserJSON(w, http.StatusBadRequest,
 				map[string]string{"error": "JSON khong hop le"})
 			return

@@ -7,6 +7,7 @@ import (
 	"warehouseproject/internal/model"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -25,7 +26,7 @@ func (r *ProductRepository) Create(
 	query := `
         INSERT INTO products
             (code, name, category_id, price, quantity, min_stock)
-        VALUES ($1, $2, $3, $4, $5, $6)
+        VALUES ($1, $2, $3, $4, 0, $5)
         RETURNING id, created_at, updated_at
     `
 
@@ -36,7 +37,6 @@ func (r *ProductRepository) Create(
 		product.Name,
 		product.CategoryID,
 		product.Price,
-		product.Quantity,
 		product.MinStock,
 	).Scan(
 		&product.ID,
@@ -230,4 +230,16 @@ func (r *ProductRepository) GetLowStock(
 	}
 
 	return products, nil
+}
+
+// IsUniqueViolation kiểm tra lỗi trùng dữ liệu PostgreSQL.
+func IsUniqueViolation(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "23505"
+}
+
+// IsForeignKeyViolation kiểm tra lỗi vi phạm khóa ngoại PostgreSQL.
+func IsForeignKeyViolation(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "23503"
 }

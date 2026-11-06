@@ -11,7 +11,7 @@ import (
 	"warehouseproject/internal/repository"
 )
 
-// ProductHandler xá»­ lÃ½ cÃ¡c API sáº£n pháº©m.
+// ProductHandler xÃ¡Â»Â­ lÃƒÂ½ cÃƒÂ¡c API sÃ¡ÂºÂ£n phÃ¡ÂºÂ©m.
 type ProductHandler struct {
 	ProductRepo *repository.ProductRepository
 }
@@ -23,7 +23,7 @@ func NewProductHandler(repo *repository.ProductRepository) *ProductHandler {
 func (h *ProductHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	path := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/products"), "/")
 
-	// Chá»‰ admin Ä‘Æ°á»£c thÃªm, sá»­a hoáº·c xÃ³a sáº£n pháº©m.
+	// ChÃ¡Â»â€° admin Ã„â€˜Ã†Â°Ã¡Â»Â£c thÃƒÂªm, sÃ¡Â»Â­a hoÃ¡ÂºÂ·c xÃƒÂ³a sÃ¡ÂºÂ£n phÃ¡ÂºÂ©m.
 	role, _ := r.Context().Value(middleware.RoleKey).(string)
 
 	switch r.Method {
@@ -41,21 +41,21 @@ func (h *ProductHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			http.NotFound(w, r)
 			return
 		}
-		if role != "admin" {
+		if !strings.EqualFold(role, "admin") {
 			writeProductError(w, http.StatusForbidden, "Ban khong co quyen truy cap")
 			return
 		}
 		h.Create(w, r)
 
 	case http.MethodPut:
-		if role != "admin" {
+		if !strings.EqualFold(role, "admin") {
 			writeProductError(w, http.StatusForbidden, "Ban khong co quyen truy cap")
 			return
 		}
 		h.Update(w, r, path)
 
 	case http.MethodDelete:
-		if role != "admin" {
+		if !strings.EqualFold(role, "admin") {
 			writeProductError(w, http.StatusForbidden, "Ban khong co quyen truy cap")
 			return
 		}
@@ -99,10 +99,16 @@ func (h *ProductHandler) GetByID(w http.ResponseWriter, r *http.Request, rawID s
 
 func (h *ProductHandler) Create(w http.ResponseWriter, r *http.Request) {
 	var product model.Product
-	if err := json.NewDecoder(r.Body).Decode(&product); err != nil {
+	if err := decodeJSONBody(w, r, &product, 1<<20, false); err != nil {
+		if isRequestBodyTooLarge(err) {
+			writeProductError(w, http.StatusRequestEntityTooLarge, "Request body qua lon")
+			return
+		}
 		writeProductError(w, http.StatusBadRequest, "Du lieu JSON khong hop le")
 		return
 	}
+
+	product.Quantity = 0
 
 	if !validProduct(&product) {
 		writeProductError(w, http.StatusBadRequest, "Thong tin san pham khong hop le")
@@ -110,11 +116,27 @@ func (h *ProductHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.ProductRepo.Create(r.Context(), &product); err != nil {
+		if repository.IsUniqueViolation(err) {
+			writeProductError(w, http.StatusConflict, "Ma san pham da ton tai")
+			return
+		}
+		if repository.IsForeignKeyViolation(err) {
+			writeProductError(w, http.StatusBadRequest, "Danh muc san pham khong ton tai")
+			return
+		}
 		writeProductError(w, http.StatusInternalServerError, "Khong the them san pham")
 		return
 	}
 
 	writeProductJSON(w, http.StatusCreated, product)
+}
+
+type productUpdateRequest struct {
+	Code       string  `json:"code"`
+	Name       string  `json:"name"`
+	CategoryID *int64  `json:"category_id"`
+	Price      float64 `json:"price"`
+	MinStock   int     `json:"min_stock"`
 }
 
 func (h *ProductHandler) Update(w http.ResponseWriter, r *http.Request, rawID string) {
@@ -124,21 +146,48 @@ func (h *ProductHandler) Update(w http.ResponseWriter, r *http.Request, rawID st
 		return
 	}
 
-	var product model.Product
-	if err := json.NewDecoder(r.Body).Decode(&product); err != nil {
+	var request productUpdateRequest
+	if err := decodeJSONBody(w, r, &request, 1<<20, true); err != nil {
+		if isRequestBodyTooLarge(err) {
+			writeProductError(w, http.StatusRequestEntityTooLarge, "Request body qua lon")
+			return
+		}
 		writeProductError(w, http.StatusBadRequest, "Du lieu JSON khong hop le")
 		return
 	}
 
-	if !validProduct(&product) {
+	product, err := h.ProductRepo.GetByID(r.Context(), id)
+	if err != nil {
+		if repository.IsNotFound(err) {
+			writeProductError(w, http.StatusNotFound, "Khong tim thay san pham")
+			return
+		}
+		writeProductError(w, http.StatusInternalServerError, "Khong the lay san pham")
+		return
+	}
+
+	product.Code = request.Code
+	product.Name = request.Name
+	product.CategoryID = request.CategoryID
+	product.Price = request.Price
+	product.MinStock = request.MinStock
+
+	if !validProduct(product) {
 		writeProductError(w, http.StatusBadRequest, "Thong tin san pham khong hop le")
 		return
 	}
 
-	product.ID = id
-	if err := h.ProductRepo.Update(r.Context(), &product); err != nil {
+	if err := h.ProductRepo.Update(r.Context(), product); err != nil {
 		if repository.IsNotFound(err) {
 			writeProductError(w, http.StatusNotFound, "Khong tim thay san pham")
+			return
+		}
+		if repository.IsUniqueViolation(err) {
+			writeProductError(w, http.StatusConflict, "Ma san pham da ton tai")
+			return
+		}
+		if repository.IsForeignKeyViolation(err) {
+			writeProductError(w, http.StatusBadRequest, "Danh muc san pham khong ton tai")
 			return
 		}
 		writeProductError(w, http.StatusInternalServerError, "Khong the cap nhat san pham")
@@ -147,7 +196,6 @@ func (h *ProductHandler) Update(w http.ResponseWriter, r *http.Request, rawID st
 
 	writeProductJSON(w, http.StatusOK, product)
 }
-
 func (h *ProductHandler) Delete(w http.ResponseWriter, r *http.Request, rawID string) {
 	id, err := strconv.ParseInt(rawID, 10, 64)
 	if err != nil || id <= 0 {
@@ -158,6 +206,10 @@ func (h *ProductHandler) Delete(w http.ResponseWriter, r *http.Request, rawID st
 	if err := h.ProductRepo.Delete(r.Context(), id); err != nil {
 		if err.Error() == "khong tim thay san pham" {
 			writeProductError(w, http.StatusNotFound, "Khong tim thay san pham")
+			return
+		}
+		if repository.IsForeignKeyViolation(err) {
+			writeProductError(w, http.StatusConflict, "Khong the xoa san pham dang duoc su dung")
 			return
 		}
 		writeProductError(w, http.StatusInternalServerError, "Khong the xoa san pham")

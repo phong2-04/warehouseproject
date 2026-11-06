@@ -4,13 +4,16 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
+	"time"
 
 	"warehouseproject/internal/service"
 )
 
 type AuthHandler struct {
-	UserService *service.UserService
+	UserService  *service.UserService
+	loginLimiter *loginAttemptLimiter
 }
 
 type LoginRequest struct {
@@ -24,16 +27,14 @@ type RefreshTokenRequest struct {
 
 func NewAuthHandler(userService *service.UserService) *AuthHandler {
 	return &AuthHandler{
-		UserService: userService,
+		UserService:  userService,
+		loginLimiter: newLoginAttemptLimiter(),
 	}
 }
 
-// Login tiáº¿p nháº­n yÃªu cáº§u Ä‘Äƒng nháº­p vÃ  tráº£ vá» hai loáº¡i token.
+// Login xu ly dang nhap va gioi han so lan dang nhap sai.
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-
 	if r.Method != http.MethodPost {
-		w.Header().Set("Allow", http.MethodPost)
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{
 			"error": "Method khong duoc ho tro",
 		})
@@ -58,41 +59,43 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := h.UserService.Login(
-		r.Context(),
-		req.Username,
-		req.Password,
-	)
-	if err != nil {
-		if errors.Is(err, service.ErrInvalidCredentials) {
-			writeJSON(w, http.StatusUnauthorized, map[string]string{
-				"error": "Username hoac password khong dung",
-			})
-			return
-		}
+	clientIP := getClientIP(r)
 
-		if errors.Is(err, service.ErrJWTSecretRequired) {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{
-				"error": "Server chua cau hinh JWT",
-			})
-			return
-		}
-
-		writeJSON(w, http.StatusInternalServerError, map[string]string{
-			"error": "Loi xu ly dang nhap",
+	if retryAfter := h.loginLimiter.retryAfter(clientIP, time.Now()); retryAfter > 0 {
+		w.Header().Set("Retry-After", strconv.Itoa(retryAfter))
+		writeJSON(w, http.StatusTooManyRequests, map[string]string{
+			"error": "Ban da dang nhap sai qua nhieu lan. Vui long thu lai sau.",
 		})
 		return
 	}
 
+	result, err := h.UserService.Login(r.Context(), req.Username, req.Password)
+	if err != nil {
+		switch {
+		case errors.Is(err, service.ErrInvalidCredentials):
+			h.loginLimiter.recordFailure(clientIP, time.Now())
+			writeJSON(w, http.StatusUnauthorized, map[string]string{
+				"error": err.Error(),
+			})
+		case errors.Is(err, service.ErrJWTSecretRequired):
+			writeJSON(w, http.StatusInternalServerError, map[string]string{
+				"error": err.Error(),
+			})
+		default:
+			writeJSON(w, http.StatusInternalServerError, map[string]string{
+				"error": "Loi dang nhap",
+			})
+		}
+		return
+	}
+
+	h.loginLimiter.reset(clientIP)
 	writeJSON(w, http.StatusOK, result)
 }
 
-// RefreshToken cáº¥p Access Token má»›i tá»« Refresh Token há»£p lá»‡.
+// RefreshToken thu hoi token cu va cap cap token moi.
 func (h *AuthHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-
 	if r.Method != http.MethodPost {
-		w.Header().Set("Allow", http.MethodPost)
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{
 			"error": "Method khong duoc ho tro",
 		})
@@ -117,36 +120,81 @@ func (h *AuthHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	accessToken, err := h.UserService.RefreshAccessToken(r.Context(), req.RefreshToken)
+	result, err := h.UserService.RefreshAccessToken(r.Context(), req.RefreshToken)
 	if err != nil {
-		if errors.Is(err, service.ErrJWTSecretRequired) {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{
-				"error": "Server chua cau hinh JWT",
-			})
-			return
-		}
-
-		if errors.Is(err, service.ErrInvalidRefreshToken) {
+		switch {
+		case errors.Is(err, service.ErrInvalidRefreshToken):
 			writeJSON(w, http.StatusUnauthorized, map[string]string{
-				"error": "Refresh token khong hop le hoac da het han",
+				"error": err.Error(),
 			})
-			return
+		case errors.Is(err, service.ErrJWTSecretRequired):
+			writeJSON(w, http.StatusInternalServerError, map[string]string{
+				"error": err.Error(),
+			})
+		default:
+			writeJSON(w, http.StatusInternalServerError, map[string]string{
+				"error": "Loi lam moi token",
+			})
 		}
+		return
+	}
 
-		writeJSON(w, http.StatusInternalServerError, map[string]string{
-			"error": "Loi lam moi token",
+	writeJSON(w, http.StatusOK, result)
+}
+
+// Logout thu hoi Refresh Token hien tai.
+func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{
+			"error": "Method khong duoc ho tro",
 		})
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"access_token": accessToken,
-		"token_type":   "Bearer",
-		"expires_in":   int64(service.AccessTokenDuration.Seconds()),
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+
+	var req RefreshTokenRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error": "Du lieu JSON khong hop le",
+		})
+		return
+	}
+
+	req.RefreshToken = strings.TrimSpace(req.RefreshToken)
+	if req.RefreshToken == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error": "Refresh token khong duoc de trong",
+		})
+		return
+	}
+
+	err := h.UserService.Logout(r.Context(), req.RefreshToken)
+	if err != nil {
+		switch {
+		case errors.Is(err, service.ErrInvalidRefreshToken):
+			writeJSON(w, http.StatusUnauthorized, map[string]string{
+				"error": err.Error(),
+			})
+		case errors.Is(err, service.ErrJWTSecretRequired):
+			writeJSON(w, http.StatusInternalServerError, map[string]string{
+				"error": err.Error(),
+			})
+		default:
+			writeJSON(w, http.StatusInternalServerError, map[string]string{
+				"error": "Loi dang xuat",
+			})
+		}
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{
+		"message": "Dang xuat thanh cong",
 	})
 }
 
 func writeJSON(w http.ResponseWriter, status int, data any) {
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(data)
 }

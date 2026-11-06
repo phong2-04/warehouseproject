@@ -301,17 +301,22 @@ const [stockForm, setStockForm] = useState({
     setEditingUserId(null)
   }
 
-  function makeProductPayload(product) {
-    return {
+  function makeProductPayload(product, includeQuantity = true) {
+    const payload = {
       code: product.code.trim(),
       name: product.name.trim(),
       category_id: product.category_id
         ? Number(product.category_id)
         : null,
       price: Number(product.price),
-      quantity: Number(product.quantity),
       min_stock: Number(product.min_stock),
     }
+
+    if (includeQuantity) {
+      payload.quantity = Number(product.quantity)
+    }
+
+    return payload
   }
 
   async function handleCreateProduct(e) {
@@ -322,7 +327,7 @@ const [stockForm, setStockForm] = useState({
     try {
       await apiRequest('/products', {
         method: 'POST',
-        body: JSON.stringify(makeProductPayload(newProduct)),
+        body: JSON.stringify(makeProductPayload(newProduct, false)),
       })
 
       setNewProduct({ ...emptyProduct })
@@ -361,7 +366,7 @@ const [stockForm, setStockForm] = useState({
     try {
       await apiRequest(`/products/${editingProductId}`, {
         method: 'PUT',
-        body: JSON.stringify(makeProductPayload(editProduct)),
+        body: JSON.stringify(makeProductPayload(editProduct, false)),
       })
 
       setEditingProductId(null)
@@ -658,7 +663,7 @@ const [stockForm, setStockForm] = useState({
     )
   }
 
-  function renderProductForm(product, setProduct, onSubmit, title, onCancel) {
+  function renderProductForm(product, setProduct, onSubmit, title, onCancel, showQuantity) {
     return (
       <section className="panel">
         <div className="panel-heading">
@@ -719,20 +724,21 @@ const [stockForm, setStockForm] = useState({
                 required
               />
             </div>
-            <div className="form-field">
-              <label>Số lượng tồn</label>
-              <input
-                type="number"
-                min="0"
-                step="1"
-                value={product.quantity}
-                onChange={(e) =>
-                  setProduct({ ...product, quantity: e.target.value })
-                }
-                required
-              />
-            </div>
-            <div className="form-field">
+            {showQuantity && (
+              <div className="form-field">
+                <label>Số lượng tồn</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={product.quantity}
+                  onChange={(e) =>
+                    setProduct({ ...product, quantity: e.target.value })
+                  }
+                  required
+                />
+              </div>
+            )}<div className="form-field">
               <label>Tồn kho tối thiểu</label>
               <input
                 type="number"
@@ -1745,6 +1751,3 @@ const [stockForm, setStockForm] = useState({
 }
 
 export default App
-
-
-

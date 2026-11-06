@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"time"
 
 	"warehouseproject/internal/model"
 
@@ -11,8 +12,9 @@ import (
 )
 
 var (
-	ErrUserNotFound = errors.New("khong tim thay nguoi dung")
-	ErrLastAdmin    = errors.New("khong the xoa hoac ha quyen admin cuoi cung")
+	ErrUserNotFound         = errors.New("khong tim thay nguoi dung")
+	ErrLastAdmin            = errors.New("khong the xoa hoac ha quyen admin cuoi cung")
+	ErrRefreshTokenNotFound = errors.New("refresh token khong ton tai hoac da bi thu hoi")
 )
 
 type UserRepository struct {
@@ -263,4 +265,88 @@ func (r *UserRepository) Delete(
 	}
 
 	return tx.Commit(ctx)
+}
+
+// Tao Refresh Token moi trong database.
+func (r *UserRepository) CreateRefreshToken(
+	ctx context.Context,
+	userID int64,
+	tokenHash string,
+	expiresAt time.Time,
+) error {
+	_, err := r.DB.Exec(ctx, `
+        INSERT INTO refresh_tokens (user_id, token_hash, expires_at)
+        VALUES ($1, $2, $3)
+    `, userID, tokenHash, expiresAt)
+
+	return err
+}
+
+// Thu hoi token cu va luu token moi trong cung mot transaction.
+func (r *UserRepository) RotateRefreshToken(
+	ctx context.Context,
+	userID int64,
+	oldTokenHash string,
+	newTokenHash string,
+	expiresAt time.Time,
+) error {
+	tx, err := r.DB.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	var tokenID int64
+
+	err = tx.QueryRow(ctx, `
+        UPDATE refresh_tokens
+        SET revoked_at = now()
+        WHERE user_id = $1
+          AND token_hash = $2
+          AND revoked_at IS NULL
+          AND expires_at > now()
+        RETURNING id
+    `, userID, oldTokenHash).Scan(&tokenID)
+
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrRefreshTokenNotFound
+	}
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec(ctx, `
+        INSERT INTO refresh_tokens (user_id, token_hash, expires_at)
+        VALUES ($1, $2, $3)
+    `, userID, newTokenHash, expiresAt)
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit(ctx)
+}
+
+// Thu hoi Refresh Token khi dang xuat.
+func (r *UserRepository) RevokeRefreshToken(
+	ctx context.Context,
+	userID int64,
+	tokenHash string,
+) error {
+	result, err := r.DB.Exec(ctx, `
+        UPDATE refresh_tokens
+        SET revoked_at = now()
+        WHERE user_id = $1
+          AND token_hash = $2
+          AND revoked_at IS NULL
+    `, userID, tokenHash)
+
+	if err != nil {
+		return err
+	}
+
+	if result.RowsAffected() == 0 {
+		return ErrRefreshTokenNotFound
+	}
+
+	return nil
 }

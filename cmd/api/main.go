@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"time"
 
 	"warehouseproject/internal/database"
 	"warehouseproject/internal/handler"
@@ -37,6 +38,7 @@ func main() {
 	// Dang nhap va lam moi token.
 	mux.HandleFunc("/api/login", authHandler.Login)
 	mux.HandleFunc("/api/refresh-token", authHandler.RefreshToken)
+	mux.HandleFunc("/api/logout", authHandler.Logout)
 
 	// Xem thong tin tai khoan dang dang nhap.
 	profileHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -207,5 +209,14 @@ func main() {
 	})
 
 	log.Println("API server dang chay tai http://localhost:8080")
-	log.Fatal(http.ListenAndServe(":8080", corsHandler))
+	server := &http.Server{
+		Addr:              ":8080",
+		Handler:           corsHandler,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       10 * time.Second,
+		WriteTimeout:      15 * time.Second,
+		IdleTimeout:       60 * time.Second,
+	}
+
+	log.Fatal(server.ListenAndServe())
 }
