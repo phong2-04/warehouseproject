@@ -1,6 +1,7 @@
-﻿package handler
+package handler
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"log"
@@ -12,11 +13,24 @@ import (
 	"warehouseproject/internal/repository"
 )
 
-type StockHandler struct {
-	repo *repository.StockRepository
+type stockRepository interface {
+	Process(
+		ctx context.Context,
+		productID int64,
+		userID int64,
+		transactionType string,
+		quantity int,
+		note string,
+	) (*repository.StockTransaction, error)
+
+	List(ctx context.Context) ([]repository.StockTransaction, error)
 }
 
-func NewStockHandler(repo *repository.StockRepository) *StockHandler {
+type StockHandler struct {
+	repo stockRepository
+}
+
+func NewStockHandler(repo stockRepository) *StockHandler {
 	return &StockHandler{repo: repo}
 }
 
@@ -136,5 +150,3 @@ func writeStockJSON(w http.ResponseWriter, status int, data interface{}) {
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(data)
 }
-
-

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"warehouseproject/internal/model"
 	"warehouseproject/internal/repository"
@@ -23,15 +24,47 @@ func NewCategoryHandler(db *pgxpool.Pool) *CategoryHandler {
 	}
 }
 
+func writeCategoryError(w http.ResponseWriter, status int, message string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(map[string]string{
+		"error": message,
+	})
+}
+
+func validCategory(c *model.Category) bool {
+	if c == nil {
+		return false
+	}
+
+	name := strings.TrimSpace(c.Name)
+	length := utf8.RuneCountInString(name)
+
+	return length >= 1 && length <= 100
+}
+
+func normalizeCategory(c *model.Category) {
+	c.Name = strings.TrimSpace(c.Name)
+
+	if c.Description != nil {
+		description := strings.TrimSpace(*c.Description)
+		if description == "" {
+			c.Description = nil
+		} else {
+			c.Description = &description
+		}
+	}
+}
+
 func (h *CategoryHandler) List(w http.ResponseWriter, r *http.Request) {
 	categories, err := h.repo.GetAll(r.Context())
 	if err != nil {
-		http.Error(w, `{"error":"Loi lay danh sach danh muc"}`, http.StatusInternalServerError)
+		writeCategoryError(w, http.StatusInternalServerError, "Loi lay danh sach danh muc")
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(categories)
+	_ = json.NewEncoder(w).Encode(categories)
 }
 
 func (h *CategoryHandler) GetByID(w http.ResponseWriter, r *http.Request) {
@@ -43,42 +76,51 @@ func (h *CategoryHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 	category, err := h.repo.GetByID(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, repository.ErrCategoryNotFound) {
-			http.Error(w, `{"error":"Khong tim thay danh muc"}`, http.StatusNotFound)
+			writeCategoryError(w, http.StatusNotFound, "Khong tim thay danh muc")
 			return
 		}
-		http.Error(w, `{"error":"Loi lay danh muc"}`, http.StatusInternalServerError)
+
+		writeCategoryError(w, http.StatusInternalServerError, "Loi lay danh muc")
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(category)
+	_ = json.NewEncoder(w).Encode(category)
 }
 
 func (h *CategoryHandler) Create(w http.ResponseWriter, r *http.Request) {
 	var c model.Category
-	if err := decodeJSONBody(w, r, &c, 256*1024, false); err != nil {
+
+	if err := decodeJSONBody(w, r, &c, 256*1024, true); err != nil {
 		if isRequestBodyTooLarge(err) {
-			http.Error(w, `{"error":"Request body qua lon"}`, http.StatusRequestEntityTooLarge)
+			writeCategoryError(w, http.StatusRequestEntityTooLarge, "Request body qua lon")
 			return
 		}
-		http.Error(w, `{"error":"JSON khong hop le"}`, http.StatusBadRequest)
+
+		writeCategoryError(w, http.StatusBadRequest, "JSON khong hop le")
 		return
 	}
 
-	c.Name = strings.TrimSpace(c.Name)
-	if c.Name == "" {
-		http.Error(w, `{"error":"Ten danh muc khong duoc de trong"}`, http.StatusBadRequest)
+	normalizeCategory(&c)
+
+	if !validCategory(&c) {
+		writeCategoryError(w, http.StatusBadRequest, "Ten danh muc phai co tu 1 den 100 ky tu")
 		return
 	}
 
 	if err := h.repo.Create(r.Context(), &c); err != nil {
-		http.Error(w, `{"error":"Loi tao danh muc"}`, http.StatusInternalServerError)
+		if repository.IsUniqueViolation(err) {
+			writeCategoryError(w, http.StatusConflict, "Ten danh muc da ton tai")
+			return
+		}
+
+		writeCategoryError(w, http.StatusInternalServerError, "Loi tao danh muc")
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(c)
+	_ = json.NewEncoder(w).Encode(c)
 }
 
 func (h *CategoryHandler) Update(w http.ResponseWriter, r *http.Request) {
@@ -88,33 +130,45 @@ func (h *CategoryHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var c model.Category
-	if err := decodeJSONBody(w, r, &c, 256*1024, false); err != nil {
+
+	if err := decodeJSONBody(w, r, &c, 256*1024, true); err != nil {
 		if isRequestBodyTooLarge(err) {
-			http.Error(w, `{"error":"Request body qua lon"}`, http.StatusRequestEntityTooLarge)
+			writeCategoryError(w, http.StatusRequestEntityTooLarge, "Request body qua lon")
 			return
 		}
-		http.Error(w, `{"error":"JSON khong hop le"}`, http.StatusBadRequest)
+
+		writeCategoryError(w, http.StatusBadRequest, "JSON khong hop le")
 		return
 	}
 
-	c.Name = strings.TrimSpace(c.Name)
-	if c.Name == "" {
-		http.Error(w, `{"error":"Ten danh muc khong duoc de trong"}`, http.StatusBadRequest)
+	normalizeCategory(&c)
+
+	if !validCategory(&c) {
+		writeCategoryError(w, http.StatusBadRequest, "Ten danh muc phai co tu 1 den 100 ky tu")
 		return
 	}
+
 	c.ID = id
 
 	if err := h.repo.Update(r.Context(), &c); err != nil {
 		if errors.Is(err, repository.ErrCategoryNotFound) {
-			http.Error(w, `{"error":"Khong tim thay danh muc"}`, http.StatusNotFound)
+			writeCategoryError(w, http.StatusNotFound, "Khong tim thay danh muc")
 			return
 		}
-		http.Error(w, `{"error":"Loi cap nhat danh muc"}`, http.StatusInternalServerError)
+
+		if repository.IsUniqueViolation(err) {
+			writeCategoryError(w, http.StatusConflict, "Ten danh muc da ton tai")
+			return
+		}
+
+		writeCategoryError(w, http.StatusInternalServerError, "Loi cap nhat danh muc")
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"message": "Cap nhat danh muc thanh cong"})
+	_ = json.NewEncoder(w).Encode(map[string]string{
+		"message": "Cap nhat danh muc thanh cong",
+	})
 }
 
 func (h *CategoryHandler) Delete(w http.ResponseWriter, r *http.Request) {
@@ -125,28 +179,38 @@ func (h *CategoryHandler) Delete(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.repo.Delete(r.Context(), id); err != nil {
 		if errors.Is(err, repository.ErrCategoryNotFound) {
-			http.Error(w, `{"error":"Khong tim thay danh muc"}`, http.StatusNotFound)
+			writeCategoryError(w, http.StatusNotFound, "Khong tim thay danh muc")
 			return
 		}
-		http.Error(w, `{"error":"Loi xoa danh muc"}`, http.StatusInternalServerError)
+
+		if repository.IsForeignKeyViolation(err) {
+			writeCategoryError(w, http.StatusConflict, "Khong the xoa danh muc dang duoc san pham su dung")
+			return
+		}
+
+		writeCategoryError(w, http.StatusInternalServerError, "Loi xoa danh muc")
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"message": "Xoa danh muc thanh cong"})
+	_ = json.NewEncoder(w).Encode(map[string]string{
+		"message": "Xoa danh muc thanh cong",
+	})
 }
 
 func categoryID(w http.ResponseWriter, r *http.Request) (int64, bool) {
 	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+
 	if len(parts) != 3 || parts[0] != "api" || parts[1] != "categories" {
-		http.Error(w, `{"error":"Duong dan khong hop le"}`, http.StatusBadRequest)
+		writeCategoryError(w, http.StatusBadRequest, "Duong dan khong hop le")
 		return 0, false
 	}
 
 	id, err := strconv.ParseInt(parts[2], 10, 64)
 	if err != nil || id <= 0 {
-		http.Error(w, `{"error":"ID khong hop le"}`, http.StatusBadRequest)
+		writeCategoryError(w, http.StatusBadRequest, "ID khong hop le")
 		return 0, false
 	}
+
 	return id, true
 }

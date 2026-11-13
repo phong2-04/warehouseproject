@@ -1,96 +1,109 @@
-﻿package repository
+package repository
 
 import (
-    "context"
-    "errors"
+	"context"
+	"errors"
 
-    "warehouseproject/internal/model"
+	"warehouseproject/internal/model"
 
-    "github.com/jackc/pgx/v5"
-    "github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 var ErrCategoryNotFound = errors.New("khong tim thay danh muc")
 
+// categoryDB là interface giúp Repository có thể sử dụng pgxpool hoặc pgxmock.
+type categoryDB interface {
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
+}
+
 type CategoryRepository struct {
-    db *pgxpool.Pool
+	db categoryDB
 }
 
 func NewCategoryRepository(db *pgxpool.Pool) *CategoryRepository {
-    return &CategoryRepository{db: db}
+	return &CategoryRepository{db: db}
+}
+
+// NewCategoryRepositoryWithDB tạo Repository từ interface, phục vụ kiểm thử.
+func NewCategoryRepositoryWithDB(db categoryDB) *CategoryRepository {
+	return &CategoryRepository{db: db}
 }
 
 func (r *CategoryRepository) GetAll(ctx context.Context) ([]model.Category, error) {
-    rows, err := r.db.Query(ctx,
-        `SELECT id, name, description, created_at
-         FROM categories ORDER BY id`)
-    if err != nil {
-        return nil, err
-    }
-    defer rows.Close()
+	rows, err := r.db.Query(ctx,
+		`SELECT id, name, description, created_at
+		 FROM categories ORDER BY id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
 
-    categories := make([]model.Category, 0)
-    for rows.Next() {
-        var c model.Category
-        if err := rows.Scan(&c.ID, &c.Name, &c.Description, &c.CreatedAt); err != nil {
-            return nil, err
-        }
-        categories = append(categories, c)
-    }
+	categories := make([]model.Category, 0)
+	for rows.Next() {
+		var c model.Category
+		if err := rows.Scan(&c.ID, &c.Name, &c.Description, &c.CreatedAt); err != nil {
+			return nil, err
+		}
+		categories = append(categories, c)
+	}
 
-    return categories, rows.Err()
+	return categories, rows.Err()
 }
 
 func (r *CategoryRepository) GetByID(ctx context.Context, id int64) (*model.Category, error) {
-    var c model.Category
-    err := r.db.QueryRow(ctx,
-        `SELECT id, name, description, created_at
-         FROM categories WHERE id = $1`, id,
-    ).Scan(&c.ID, &c.Name, &c.Description, &c.CreatedAt)
+	var c model.Category
+	err := r.db.QueryRow(ctx,
+		`SELECT id, name, description, created_at
+		 FROM categories WHERE id = $1`, id,
+	).Scan(&c.ID, &c.Name, &c.Description, &c.CreatedAt)
 
-    if errors.Is(err, pgx.ErrNoRows) {
-        return nil, ErrCategoryNotFound
-    }
-    if err != nil {
-        return nil, err
-    }
-    return &c, nil
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrCategoryNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &c, nil
 }
 
 func (r *CategoryRepository) Create(ctx context.Context, c *model.Category) error {
-    return r.db.QueryRow(ctx,
-        `INSERT INTO categories (name, description)
-         VALUES ($1, $2)
-         RETURNING id, created_at`,
-        c.Name, c.Description,
-    ).Scan(&c.ID, &c.CreatedAt)
+	return r.db.QueryRow(ctx,
+		`INSERT INTO categories (name, description)
+		 VALUES ($1, $2)
+		 RETURNING id, created_at`,
+		c.Name, c.Description,
+	).Scan(&c.ID, &c.CreatedAt)
 }
 
 func (r *CategoryRepository) Update(ctx context.Context, c *model.Category) error {
-    tag, err := r.db.Exec(ctx,
-        `UPDATE categories
-         SET name = $1, description = $2
-         WHERE id = $3`,
-        c.Name, c.Description, c.ID,
-    )
-    if err != nil {
-        return err
-    }
-    if tag.RowsAffected() == 0 {
-        return ErrCategoryNotFound
-    }
-    return nil
+	tag, err := r.db.Exec(ctx,
+		`UPDATE categories
+		 SET name = $1, description = $2
+		 WHERE id = $3`,
+		c.Name, c.Description, c.ID,
+	)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrCategoryNotFound
+	}
+	return nil
 }
 
 func (r *CategoryRepository) Delete(ctx context.Context, id int64) error {
-    tag, err := r.db.Exec(ctx,
-        `DELETE FROM categories WHERE id = $1`, id,
-    )
-    if err != nil {
-        return err
-    }
-    if tag.RowsAffected() == 0 {
-        return ErrCategoryNotFound
-    }
-    return nil
+	tag, err := r.db.Exec(ctx,
+		`DELETE FROM categories WHERE id = $1`, id,
+	)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrCategoryNotFound
+	}
+	return nil
 }

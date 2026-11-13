@@ -8,6 +8,7 @@ import (
 	"warehouseproject/internal/model"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -17,11 +18,22 @@ var (
 	ErrRefreshTokenNotFound = errors.New("refresh token khong ton tai hoac da bi thu hoi")
 )
 
+type userDB interface {
+	QueryRow(ctx context.Context, sql string, args ...interface{}) pgx.Row
+	Query(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error)
+	Exec(ctx context.Context, sql string, args ...interface{}) (pgconn.CommandTag, error)
+	Begin(ctx context.Context) (pgx.Tx, error)
+}
+
 type UserRepository struct {
-	DB *pgxpool.Pool
+	DB userDB
 }
 
 func NewUserRepository(db *pgxpool.Pool) *UserRepository {
+	return &UserRepository{DB: db}
+}
+
+func NewUserRepositoryWithDB(db userDB) *UserRepository {
 	return &UserRepository{DB: db}
 }
 

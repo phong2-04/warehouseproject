@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -11,8 +12,14 @@ import (
 	"warehouseproject/internal/service"
 )
 
+type authUserService interface {
+	Login(ctx context.Context, username, password string) (*service.LoginResponse, error)
+	RefreshAccessToken(ctx context.Context, refreshToken string) (*service.RefreshResponse, error)
+	Logout(ctx context.Context, refreshToken string) error
+}
+
 type AuthHandler struct {
-	UserService  *service.UserService
+	UserService  authUserService
 	loginLimiter *loginAttemptLimiter
 }
 
@@ -25,14 +32,13 @@ type RefreshTokenRequest struct {
 	RefreshToken string `json:"refresh_token"`
 }
 
-func NewAuthHandler(userService *service.UserService) *AuthHandler {
+func NewAuthHandler(userService authUserService) *AuthHandler {
 	return &AuthHandler{
 		UserService:  userService,
 		loginLimiter: newLoginAttemptLimiter(),
 	}
 }
 
-// Login xu ly dang nhap va gioi han so lan dang nhap sai.
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{
@@ -93,7 +99,6 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, result)
 }
 
-// RefreshToken thu hoi token cu va cap cap token moi.
 func (h *AuthHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{
@@ -142,7 +147,6 @@ func (h *AuthHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, result)
 }
 
-// Logout thu hoi Refresh Token hien tai.
 func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{

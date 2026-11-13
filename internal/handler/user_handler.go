@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -8,19 +9,25 @@ import (
 	"strings"
 
 	"warehouseproject/internal/middleware"
+	"warehouseproject/internal/model"
 	"warehouseproject/internal/repository"
 	"warehouseproject/internal/service"
 
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
-type UserHandler struct {
-	UserService *service.UserManagementService
+type userManagementService interface {
+	GetAll(ctx context.Context) ([]model.User, error)
+	Create(ctx context.Context, username, password, fullName, role string) (*model.User, error)
+	Update(ctx context.Context, id int64, username, fullName, role string) (*model.User, error)
+	Delete(ctx context.Context, id int64) error
 }
 
-func NewUserHandler(
-	userService *service.UserManagementService,
-) *UserHandler {
+type UserHandler struct {
+	UserService userManagementService
+}
+
+func NewUserHandler(userService userManagementService) *UserHandler {
 	return &UserHandler{UserService: userService}
 }
 
@@ -34,13 +41,11 @@ func decodeUserJSON(w http.ResponseWriter, r *http.Request, dst any) error {
 	return decodeJSONBody(w, r, dst, 256*1024, true)
 }
 
-// Kiem tra ma loi PostgreSQL.
 func isPostgresError(err error, code string) bool {
 	var pgErr *pgconn.PgError
 	return errors.As(err, &pgErr) && pgErr.Code == code
 }
 
-// GET /api/users: danh sach; POST /api/users: tao tai khoan.
 func (h *UserHandler) Users(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
@@ -105,7 +110,6 @@ func (h *UserHandler) Users(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// PUT /api/users/{id}: sua; DELETE /api/users/{id}: xoa.
 func (h *UserHandler) UserByID(w http.ResponseWriter, r *http.Request) {
 	idText := strings.TrimPrefix(r.URL.Path, "/api/users/")
 	id, err := strconv.ParseInt(idText, 10, 64)

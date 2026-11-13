@@ -1,4 +1,4 @@
-﻿package repository
+package repository
 
 import (
 	"context"
@@ -17,20 +17,31 @@ var (
 )
 
 type StockTransaction struct {
-	ID              int64  `json:"id"`
-	ProductID       int64  `json:"product_id"`
-	UserID          int64  `json:"user_id"`
-	TransactionType string `json:"transaction_type"`
-	Quantity        int    `json:"quantity"`
-	Note            string `json:"note"`
-	CreatedAt time.Time `json:"created_at"`
+	ID              int64     `json:"id"`
+	ProductID       int64     `json:"product_id"`
+	UserID          int64     `json:"user_id"`
+	TransactionType string    `json:"transaction_type"`
+	Quantity        int       `json:"quantity"`
+	Note            string    `json:"note"`
+	CreatedAt       time.Time `json:"created_at"`
+}
+
+// Interface giúp mock database khi viết Unit Test.
+type stockDB interface {
+	BeginTx(ctx context.Context, txOptions pgx.TxOptions) (pgx.Tx, error)
+	Query(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error)
 }
 
 type StockRepository struct {
-	db *pgxpool.Pool
+	db stockDB
 }
 
 func NewStockRepository(db *pgxpool.Pool) *StockRepository {
+	return &StockRepository{db: db}
+}
+
+// Constructor dùng trong Unit Test.
+func NewStockRepositoryWithDB(db stockDB) *StockRepository {
 	return &StockRepository{db: db}
 }
 
@@ -54,6 +65,7 @@ func (repo *StockRepository) Process(
 	if err != nil {
 		return nil, err
 	}
+
 	defer func() {
 		_ = tx.Rollback(ctx)
 	}()
@@ -89,6 +101,7 @@ func (repo *StockRepository) Process(
 			quantity, productID,
 		)
 	}
+
 	if err != nil {
 		return nil, err
 	}
@@ -111,6 +124,7 @@ func (repo *StockRepository) Process(
 		&record.Note,
 		&record.CreatedAt,
 	)
+
 	if err != nil {
 		return nil, err
 	}
@@ -132,14 +146,17 @@ func (repo *StockRepository) List(
          FROM stock_transactions
          ORDER BY created_at DESC, id DESC`,
 	)
+
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
 	records := make([]StockTransaction, 0)
+
 	for rows.Next() {
 		var record StockTransaction
+
 		if err := rows.Scan(
 			&record.ID,
 			&record.ProductID,
@@ -151,6 +168,7 @@ func (repo *StockRepository) List(
 		); err != nil {
 			return nil, err
 		}
+
 		records = append(records, record)
 	}
 
@@ -160,5 +178,3 @@ func (repo *StockRepository) List(
 
 	return records, nil
 }
-
-

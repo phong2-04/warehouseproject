@@ -2,16 +2,18 @@ package handler
 
 import (
 	"encoding/json"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"warehouseproject/internal/middleware"
 	"warehouseproject/internal/model"
 	"warehouseproject/internal/repository"
 )
 
-// ProductHandler xÃ¡Â»Â­ lÃƒÂ½ cÃƒÂ¡c API sÃ¡ÂºÂ£n phÃ¡ÂºÂ©m.
+// ProductHandler xÃƒÂ¡Ã‚Â»Ã‚Â­ lÃƒÆ’Ã‚Â½ cÃƒÆ’Ã‚Â¡c API sÃƒÂ¡Ã‚ÂºÃ‚Â£n phÃƒÂ¡Ã‚ÂºÃ‚Â©m.
 type ProductHandler struct {
 	ProductRepo *repository.ProductRepository
 }
@@ -23,7 +25,7 @@ func NewProductHandler(repo *repository.ProductRepository) *ProductHandler {
 func (h *ProductHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	path := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/products"), "/")
 
-	// ChÃ¡Â»â€° admin Ã„â€˜Ã†Â°Ã¡Â»Â£c thÃƒÂªm, sÃ¡Â»Â­a hoÃ¡ÂºÂ·c xÃƒÂ³a sÃ¡ÂºÂ£n phÃ¡ÂºÂ©m.
+	// ChÃƒÂ¡Ã‚Â»Ã¢â‚¬Â° admin Ãƒâ€žÃ¢â‚¬ËœÃƒâ€ Ã‚Â°ÃƒÂ¡Ã‚Â»Ã‚Â£c thÃƒÆ’Ã‚Âªm, sÃƒÂ¡Ã‚Â»Ã‚Â­a hoÃƒÂ¡Ã‚ÂºÃ‚Â·c xÃƒÆ’Ã‚Â³a sÃƒÂ¡Ã‚ÂºÃ‚Â£n phÃƒÂ¡Ã‚ÂºÃ‚Â©m.
 	role, _ := r.Context().Value(middleware.RoleKey).(string)
 
 	switch r.Method {
@@ -108,6 +110,8 @@ func (h *ProductHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	product.Code = strings.TrimSpace(product.Code)
+	product.Name = strings.TrimSpace(product.Name)
 	product.Quantity = 0
 
 	if !validProduct(&product) {
@@ -166,8 +170,8 @@ func (h *ProductHandler) Update(w http.ResponseWriter, r *http.Request, rawID st
 		return
 	}
 
-	product.Code = request.Code
-	product.Name = request.Name
+	product.Code = strings.TrimSpace(request.Code)
+	product.Name = strings.TrimSpace(request.Name)
 	product.CategoryID = request.CategoryID
 	product.Price = request.Price
 	product.MinStock = request.MinStock
@@ -220,11 +224,39 @@ func (h *ProductHandler) Delete(w http.ResponseWriter, r *http.Request, rawID st
 }
 
 func validProduct(p *model.Product) bool {
-	return strings.TrimSpace(p.Code) != "" &&
-		strings.TrimSpace(p.Name) != "" &&
-		p.Price >= 0 &&
-		p.Quantity >= 0 &&
-		p.MinStock >= 0
+	if p == nil {
+		return false
+	}
+
+	code := utf8.RuneCountInString(p.Code)
+	name := utf8.RuneCountInString(p.Name)
+
+	if code == 0 || code > 50 {
+		return false
+	}
+
+	if name == 0 || name > 150 {
+		return false
+	}
+
+	if math.IsNaN(p.Price) || math.IsInf(p.Price, 0) ||
+		p.Price < 0 || p.Price > 9999999999.99 {
+		return false
+	}
+
+	if p.Quantity < 0 || p.Quantity > 2147483647 {
+		return false
+	}
+
+	if p.MinStock < 0 || p.MinStock > 2147483647 {
+		return false
+	}
+
+	if p.CategoryID != nil && *p.CategoryID <= 0 {
+		return false
+	}
+
+	return true
 }
 
 func writeProductJSON(w http.ResponseWriter, status int, data interface{}) {

@@ -88,3 +88,1257 @@ footer { text-align: center; padding: 18px 0 3px; color: #a1a9b8; font-size: 11p
 @media (max-width: 850px) {
   .dashboard-extra-grid { grid-template-columns: 1fr; }
 }
+/* ===== WMS UI IMPROVEMENTS ===== */
+
+button {
+  transition: background .2s ease, color .2s ease, border-color .2s ease, transform .2s ease;
+}
+
+input, select, textarea {
+  width: 100%;
+  padding: 11px 13px;
+  border: 1px solid #dfe4ed;
+  border-radius: 8px;
+  background: #fff;
+  color: #354056;
+  outline: none;
+  transition: border-color .2s ease, box-shadow .2s ease;
+}
+
+input:focus, select:focus, textarea:focus {
+  border-color: #6258dc;
+  box-shadow: 0 0 0 3px rgba(98, 88, 220, .1);
+}
+
+textarea {
+  min-height: 90px;
+  resize: vertical;
+}
+
+button:disabled {
+  opacity: .55;
+  cursor: not-allowed;
+}
+
+/* Login */
+.login-page {
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 25px;
+  background: linear-gradient(135deg, #f1f0ff, #f5f7fb 55%, #eaf3ff);
+}
+
+.login-card {
+  width: 100%;
+  max-width: 430px;
+  padding: 38px;
+  background: #fff;
+  border: 1px solid #e9edf4;
+  border-radius: 18px;
+  box-shadow: 0 18px 55px rgba(40, 50, 90, .09);
+}
+
+.login-card h1 {
+  margin: 0 0 10px;
+  color: #26324a;
+  font-size: 27px;
+}
+
+.login-card p {
+  color: #929bad;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.login-card input {
+  margin: 8px 0 17px;
+}
+
+.login-card .primary-button {
+  width: 100%;
+  min-height: 44px;
+  margin-top: 10px;
+}
+
+/* Branding and navigation */
+.brand-icon {
+  width: 43px;
+  height: 43px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  border-radius: 12px;
+  background: #6258dc;
+  color: white;
+  font-size: 23px;
+  font-weight: 800;
+}
+
+.side-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.menu-icon {
+  width: 23px;
+  display: inline-grid;
+  place-items: center;
+  font-size: 18px;
+}
+
+.menu-item {
+  width: 100%;
+}
+
+.active-dot {
+  width: 7px;
+  height: 7px;
+  display: inline-block;
+  border-radius: 50%;
+  background: #26a879;
+}
+
+.sidebar-bottom {
+  line-height: 1.7;
+}
+
+/* Top bar and page headings */
+.user-area {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.user-avatar {
+  width: 39px;
+  height: 39px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: #e9e7ff;
+  color: #5d53d5;
+  font-weight: 800;
+}
+
+.user-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  color: #354056;
+  font-size: 13px;
+}
+
+.user-info small {
+  color: #969fb0;
+  font-size: 11px;
+}
+
+.welcome {
+  margin-bottom: 20px;
+  color: #748095;
+  font-size: 13px;
+}
+
+.breadcrumb {
+  margin-bottom: 9px;
+  color: #929bad;
+  font-size: 12px;
+}
+
+.page-title {
+  margin: 0;
+  color: #26324a;
+  font-size: 26px;
+  font-weight: 700;
+}
+
+.heading-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+/* Buttons */
+.primary-button {
+  min-height: 39px;
+  font-weight: 600;
+}
+
+.outline-button {
+  min-height: 39px;
+  padding: 10px 14px;
+  border: 1px solid #dfe4ed;
+  border-radius: 8px;
+  background: #fff;
+  color: #657087;
+  font-size: 12px;
+}
+
+.outline-button:hover {
+  border-color: #6258dc;
+  color: #6258dc;
+  background: #f8f7ff;
+}
+
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+/* Forms */
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 17px;
+}
+
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.form-field label {
+  color: #657087;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.form-field.full-width {
+  grid-column: 1 / -1;
+}
+
+.help-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 17px;
+  height: 17px;
+  margin-left: 5px;
+  border-radius: 50%;
+  background: #efedff;
+  color: #6258dc;
+  font-size: 11px;
+}
+
+/* Tables */
+.data-table,
+.table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.data-table table,
+.table-wrapper table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.product-code {
+  color: #6258dc;
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.product-name {
+  color: #354056;
+  font-weight: 600;
+}
+
+table button {
+  margin: 2px;
+}
+
+table button:hover {
+  transform: translateY(-1px);
+}
+
+/* Feedback */
+.error-message {
+  margin: 12px 0;
+  padding: 12px 15px;
+  border: 1px solid #f3d1d1;
+  border-radius: 9px;
+  background: #fff3f3;
+  color: #c34444;
+  font-size: 13px;
+}
+
+.notice-panel {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  margin-bottom: 20px;
+  padding: 16px;
+  border: 1px solid #f4e5ca;
+  border-radius: 11px;
+  background: #fffaf2;
+}
+
+.notice-symbol {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: #ffedcf;
+  color: #c8882c;
+}
+
+/* Dashboard charts */
+.category-stat-row {
+  width: 100%;
+}
+
+.category-stat-row .category-bar-track {
+  margin-top: 8px;
+}
+
+.movement-chart {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.movement-bar {
+  display: block;
+}
+
+.today {
+  color: #929bad;
+  font-size: 11px;
+}
+
+/* Responsive */
+@media (max-width: 850px) {
+  .sidebar {
+    width: 210px;
+  }
+
+  .main-area {
+    margin-left: 210px;
+  }
+
+  .topbar {
+    padding: 0 20px;
+  }
+
+  .stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 650px) {
+  .sidebar {
+    width: 100%;
+  }
+
+  .main-area {
+    margin-left: 0;
+  }
+
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .form-field.full-width {
+    grid-column: auto;
+  }
+
+  .login-card {
+    padding: 25px;
+  }
+
+  .user-info {
+    display: none;
+  }
+
+  .heading-actions {
+    width: 100%;
+  }
+
+  .heading-actions button {
+    flex: 1;
+  }
+}
+
+/* =================================
+   WMS - GIAO DIEN QUAN LY KHO
+   Phong cach doanh nghiep Viet Nam
+================================= */
+
+:root {
+  font-family: "Segoe UI", Arial, sans-serif;
+  color: #263445;
+  background: #f4f6f9;
+}
+
+/* Mau chu dao */
+.brand-logo,
+.brand-icon {
+  background: #2563a6;
+}
+
+.primary-button {
+  background: #2563a6;
+  border-radius: 6px;
+}
+
+.primary-button:hover {
+  background: #194d82;
+}
+
+.menu-item:hover,
+.menu-item.active {
+  background: #eaf2f9;
+  color: #2563a6;
+}
+
+.menu-item.active {
+  border-left: 3px solid #2563a6;
+}
+
+/* Sidebar */
+.sidebar {
+  background: #fff;
+  border-right: 1px solid #dfe5ec;
+  padding-top: 22px;
+}
+
+.brand {
+  margin-bottom: 30px;
+}
+
+.brand h2 {
+  color: #17324d;
+}
+
+.menu-label {
+  color: #8995a4;
+}
+
+.menu-item {
+  border-radius: 6px;
+  padding: 12px;
+}
+
+/* Khu vuc noi dung */
+.main-area {
+  background: #f4f6f9;
+}
+
+.topbar {
+  height: 66px;
+  border-bottom: 1px solid #dfe5ec;
+  background: #fff;
+}
+
+.page-content {
+  padding: 27px 30px;
+}
+
+.page-title,
+.page-heading h1 {
+  color: #17324d;
+  font-weight: 650;
+}
+
+/* The thong ke */
+.stats-grid {
+  gap: 15px;
+}
+
+.stat-card,
+.panel {
+  background: #fff;
+  border: 1px solid #e1e6ed;
+  border-radius: 8px;
+  box-shadow: none;
+}
+
+.stat-card {
+  padding: 19px;
+}
+
+.stat-card h2 {
+  color: #17324d;
+  font-size: 25px;
+  font-weight: 700;
+}
+
+.stat-icon {
+  border-radius: 7px;
+}
+
+.purple,
+.blue {
+  background: #eaf2f9;
+  color: #2563a6;
+}
+
+.green {
+  background: #e8f4ed;
+  color: #278253;
+}
+
+.orange {
+  background: #fff2e5;
+  color: #bd742c;
+}
+
+/* Bang du lieu */
+.panel {
+  padding: 20px;
+}
+
+.panel-heading {
+  margin-bottom: 18px;
+}
+
+.panel-heading h3,
+.panel h3 {
+  color: #263b52;
+  font-weight: 650;
+}
+
+table {
+  font-size: 13px;
+}
+
+thead {
+  background: #f3f6f9;
+}
+
+th {
+  color: #536477;
+  font-size: 11px;
+  font-weight: 700;
+  border-bottom: 1px solid #dfe5ec;
+}
+
+td {
+  padding: 14px 12px;
+  color: #465568;
+  border-bottom: 1px solid #edf0f4;
+}
+
+tbody tr:hover {
+  background: #f8fafc;
+}
+
+.code,
+.product-code {
+  color: #2563a6;
+}
+
+/* Trang thai ton kho */
+.available {
+  background: #e8f4ed;
+  color: #278253;
+}
+
+.low {
+  background: #fff2e5;
+  color: #bd742c;
+}
+
+.status {
+  border-radius: 4px;
+  padding: 5px 8px;
+}
+
+/* Form nhap lieu */
+input,
+select,
+textarea {
+  border: 1px solid #d7dee7;
+  border-radius: 6px;
+  background: #fff;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: #4382b8;
+  box-shadow: 0 0 0 2px rgba(37, 99, 166, .08);
+}
+
+.form-field label {
+  color: #465568;
+  font-weight: 600;
+}
+
+/* Nut thao tac */
+.outline-button {
+  border-radius: 6px;
+  border-color: #cbd5df;
+  color: #465568;
+}
+
+.outline-button:hover {
+  background: #edf4fa;
+  color: #2563a6;
+  border-color: #8eb3d3;
+}
+
+.form-actions {
+  margin-top: 22px;
+}
+
+/* Thong bao */
+.error-message {
+  border-radius: 6px;
+}
+
+.notice,
+.notice-panel {
+  border-radius: 7px;
+}
+
+/* Dang nhap */
+.login-page {
+  background: #f1f4f8;
+}
+
+.login-card {
+  border-radius: 10px;
+  box-shadow: 0 4px 18px rgba(30, 50, 70, .06);
+}
+
+.login-card h1 {
+  color: #17324d;
+}
+
+/* Bieu do */
+.category-bar {
+  background: #367eb5;
+}
+
+.import-dot,
+.import-bar {
+  background: #278253;
+}
+
+.export-dot,
+.export-bar {
+  background: #d58b3e;
+}
+
+.movement-summary > div {
+  background: #f4f6f9;
+  border-radius: 6px;
+}
+
+/* Chan trang */
+footer {
+  color: #8995a4;
+}
+
+/* Giam hieu ung */
+* {
+  box-shadow: none;
+}
+
+.primary-button,
+.outline-button,
+.menu-item {
+  transition: background .15s ease, color .15s ease;
+}
+
+/* Man hinh nho */
+@media (max-width: 850px) {
+  .page-content {
+    padding: 20px;
+  }
+}
+
+@media (max-width: 650px) {
+  .page-content {
+    padding: 15px;
+  }
+
+  .stat-card {
+    padding: 13px;
+  }
+
+  .panel {
+    padding: 14px;
+  }
+}
+
+
+/* ===== WMS BLUE THEME - FINAL POLISH ===== */
+
+:root {
+  --wms-blue: #1769aa;
+  --wms-blue-dark: #12558c;
+  --wms-blue-light: #eaf4fc;
+  --wms-border: #dce6ef;
+}
+
+/* Nut chinh */
+.primary-button {
+  background: linear-gradient(135deg, #247fc0, #1769aa);
+  color: #fff;
+  border: 1px solid #1769aa;
+  border-radius: 7px;
+  padding: 11px 17px;
+  font-weight: 600;
+  box-shadow: 0 2px 5px rgba(23, 105, 170, .16);
+}
+
+.primary-button:hover {
+  background: #12558c;
+  box-shadow: 0 4px 10px rgba(23, 105, 170, .22);
+  transform: translateY(-1px);
+}
+
+/* Nut phu */
+.outline-button {
+  background: #fff;
+  color: #1769aa;
+  border: 1px solid #b9d2e7;
+  border-radius: 7px;
+  padding: 10px 14px;
+  font-weight: 600;
+}
+
+.outline-button:hover {
+  background: #eaf4fc;
+  border-color: #1769aa;
+}
+
+/* Menu */
+.menu-item {
+  border-radius: 7px;
+  transition: all .18s ease;
+}
+
+.menu-item:hover {
+  background: #f0f7fd;
+  color: #1769aa;
+}
+
+.menu-item.active {
+  background: #e5f2fc;
+  color: #12558c;
+  border-left: 3px solid #1769aa;
+  font-weight: 700;
+}
+
+/* Logo */
+.brand-logo,
+.brand-icon {
+  background: #1769aa;
+  border-radius: 9px;
+}
+
+/* Tieu de */
+.page-heading h1,
+.page-title {
+  color: #173b5c;
+  font-weight: 700;
+}
+
+/* The thong ke */
+.stat-card {
+  border: 1px solid #dce6ef;
+  border-radius: 9px;
+  transition: border-color .18s ease, transform .18s ease;
+}
+
+.stat-card:hover {
+  border-color: #a9cce8;
+  transform: translateY(-2px);
+}
+
+.stat-card h2 {
+  color: #1769aa;
+  font-weight: 700;
+}
+
+.stat-icon.blue,
+.stat-icon.purple {
+  background: #e5f2fc;
+  color: #1769aa;
+}
+
+/* Khu vuc noi dung */
+.panel {
+  border: 1px solid #dce6ef;
+  border-radius: 9px;
+}
+
+.panel-heading h3,
+.panel h3 {
+  color: #24445f;
+}
+
+/* Bang du lieu */
+thead {
+  background: #edf5fb;
+}
+
+th {
+  color: #315d7f;
+  font-weight: 700;
+}
+
+td {
+  color: #526477;
+}
+
+tbody tr:hover {
+  background: #f1f8fd;
+}
+
+/* Form */
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: #3988c2;
+  box-shadow: 0 0 0 3px rgba(23, 105, 170, .12);
+}
+
+/* Trang thai */
+.status {
+  font-weight: 650;
+  border-radius: 5px;
+}
+
+/* Bao loi va thong bao */
+.error-message {
+  border: 1px solid #f1caca;
+  background: #fff5f5;
+  color: #b83b3b;
+}
+
+/* Trang dang nhap */
+.login-page {
+  background: #edf4fa;
+}
+
+.login-card {
+  border: 1px solid #dce6ef;
+  border-radius: 10px;
+  box-shadow: 0 8px 25px rgba(29, 76, 112, .08);
+}
+
+.login-card h1 {
+  color: #173b5c;
+}
+
+/* Bieu do */
+.category-bar {
+  background: #287fba;
+}
+
+.import-dot,
+.import-bar {
+  background: #26966b;
+}
+
+.export-dot,
+.export-bar {
+  background: #df913e;
+}
+
+/* Hieu ung thao tac */
+button:focus-visible {
+  outline: 3px solid rgba(23, 105, 170, .25);
+  outline-offset: 2px;
+}
+
+button:active {
+  transform: translateY(0);
+}
+
+
+/* ===== BLUE DOMINANT WMS THEME ===== */
+
+/* Sidebar xanh duong */
+.sidebar {
+  background: #155b91 !important;
+  border-right: none !important;
+  color: #fff;
+}
+
+.brand h2,
+.brand small {
+  color: #fff !important;
+}
+
+.brand small {
+  opacity: .75;
+}
+
+.brand-logo,
+.brand-icon {
+  background: #fff !important;
+  color: #155b91 !important;
+}
+
+.menu-label {
+  color: #b9d7ee !important;
+}
+
+.menu-item {
+  color: #e4f1fa !important;
+}
+
+.menu-item:hover {
+  background: rgba(255,255,255,.13) !important;
+  color: #fff !important;
+}
+
+.menu-item.active {
+  background: #fff !important;
+  color: #155b91 !important;
+  border-left: 4px solid #8bc8f2 !important;
+}
+
+.sidebar-bottom {
+  background: rgba(255,255,255,.12) !important;
+  color: #fff !important;
+}
+
+.sidebar-bottom p {
+  color: #d0e5f5 !important;
+}
+
+/* Thanh tren xanh duong */
+.topbar {
+  background: #1769a8 !important;
+  border-bottom: none !important;
+  color: #e4f1fa !important;
+}
+
+.topbar strong,
+.profile,
+.user-info {
+  color: #fff !important;
+}
+
+.profile small,
+.user-info small {
+  color: #d0e5f5 !important;
+}
+
+.avatar,
+.user-avatar {
+  background: #fff !important;
+  color: #1769a8 !important;
+}
+
+/* Nen khu vuc lam viec */
+.main-area {
+  background: #eaf3fb !important;
+}
+
+.page-content {
+  background: transparent;
+}
+
+/* Tieu de */
+.page-heading h1,
+.page-title {
+  color: #154d79 !important;
+}
+
+/* Cac khoi noi dung */
+.stat-card,
+.panel {
+  background: #fff !important;
+  border: 1px solid #d4e3ef !important;
+  border-radius: 9px !important;
+}
+
+/* Mau xanh thong ke */
+.stat-card h2 {
+  color: #1769a8 !important;
+}
+
+.stat-icon.blue,
+.stat-icon.purple {
+  background: #dceefa !important;
+  color: #1769a8 !important;
+}
+
+/* Nut chinh */
+.primary-button {
+  background: #1769a8 !important;
+  color: #fff !important;
+  border-color: #1769a8 !important;
+}
+
+.primary-button:hover {
+  background: #104d7d !important;
+}
+
+/* Bang */
+thead {
+  background: #e6f1fa !important;
+}
+
+/* Responsive */
+@media (max-width: 650px) {
+  .sidebar {
+    background: #155b91 !important;
+  }
+}
+
+
+/* ===== DASHBOARD REFINEMENT ===== */
+
+/* Loi chao */
+.welcome {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 22px 24px;
+  margin-bottom: 22px;
+  background: #fff;
+  border: 1px solid #d7e5f1;
+  border-left: 5px solid #1769a8;
+  border-radius: 9px;
+}
+
+.welcome h2 {
+  margin: 0 0 7px;
+  color: #174e79;
+  font-size: 21px;
+}
+
+.welcome p {
+  margin: 0;
+  color: #718397;
+  font-size: 13px;
+}
+
+.today {
+  padding: 9px 13px;
+  background: #e7f5ed;
+  color: #238253;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* 6 the thong ke */
+.stats-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  gap: 17px;
+  margin-bottom: 24px;
+}
+
+.stat-card {
+  position: relative;
+  padding: 20px !important;
+  min-height: 155px;
+  border: 1px solid #dce7f0 !important;
+  border-top: 3px solid #287fba !important;
+  border-radius: 9px !important;
+  background: #fff !important;
+  transition: transform .18s ease, border-color .18s ease;
+}
+
+.stat-card:hover {
+  transform: translateY(-3px);
+  border-color: #8eb9d9 !important;
+}
+
+.stat-icon {
+  width: 42px;
+  height: 42px;
+  margin-bottom: 13px;
+  border-radius: 8px;
+  font-size: 19px;
+}
+
+.stat-icon.purple,
+.stat-icon.blue {
+  background: #e3f1fb !important;
+  color: #1769a8;
+}
+
+.stat-icon.green {
+  background: #e6f4eb !important;
+  color: #278253;
+}
+
+.stat-icon.orange {
+  background: #fff1e3 !important;
+  color: #c47b30;
+}
+
+.stat-card p {
+  margin: 0 0 7px;
+  color: #667b8e;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.stat-card h3 {
+  margin: 0 0 7px;
+  color: #155b91;
+  font-size: 27px;
+  font-weight: 750;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.stat-card span {
+  color: #91a0ae;
+  font-size: 11px;
+}
+
+/* Hai bang thong ke */
+.dashboard-extra-grid {
+  gap: 18px;
+}
+
+.dashboard-extra-grid .panel {
+  padding: 22px;
+}
+
+.panel-heading h3 {
+  color: #194e77;
+  font-size: 16px;
+}
+
+.panel-heading p {
+  line-height: 1.6;
+}
+
+/* Thanh tien do danh muc */
+.category-stat-list {
+  gap: 21px;
+}
+
+.category-bar-track {
+  height: 10px;
+  background: #eaf1f7;
+  border-radius: 5px;
+}
+
+.category-bar {
+  background: #287fba;
+  border-radius: 5px;
+}
+
+/* Thong ke nhap xuat */
+.movement-summary > div {
+  background: #edf5fb;
+  border: 1px solid #dceaf5;
+  border-radius: 7px;
+}
+
+.movement-summary strong {
+  color: #155b91;
+}
+
+.movement-bar-track {
+  height: 11px;
+  background: #eaf0f5;
+  border-radius: 5px;
+}
+
+.movement-bar {
+  border-radius: 5px;
+}
+
+/* Bang san pham */
+.data-table thead,
+.table-wrapper thead,
+.table-wrap thead {
+  background: #eaf3fa;
+}
+
+.data-table th,
+.table-wrapper th,
+.table-wrap th {
+  color: #245b83;
+  font-weight: 700;
+}
+
+.data-table td,
+.table-wrapper td,
+.table-wrap td {
+  padding-top: 14px;
+  padding-bottom: 14px;
+}
+
+.data-table tbody tr:hover,
+.table-wrapper tbody tr:hover,
+.table-wrap tbody tr:hover {
+  background: #f1f7fc;
+}
+
+/* Canh bao ton kho */
+.notice-panel {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  padding: 18px 20px;
+  background: #fff8ed;
+  border: 1px solid #f0d7b2;
+  border-left: 4px solid #dc923d;
+  border-radius: 8px;
+}
+
+.notice-panel h4 {
+  margin: 0 0 5px;
+  color: #9b6427;
+}
+
+.notice-panel p {
+  margin: 0;
+  color: #876f53;
+  font-size: 12px;
+}
+
+.notice-symbol {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  background: #ffebcc;
+  color: #b87525;
+  border-radius: 50%;
+  font-weight: 800;
+}
+
+@media (max-width: 1000px) {
+  .stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (max-width: 650px) {
+  .stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .welcome {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .stat-card h3 {
+    font-size: 22px;
+  }
+}
+
