@@ -32,3 +32,14 @@ go.work.sum
 
 # Logs
 *.log
+
+# Local database backups and exports
+*.dump
+warehouse_data.sql
+
+# Coverage artifacts
+coverage
+coverage.*
+
+# Temporary frontend files
+*.bak

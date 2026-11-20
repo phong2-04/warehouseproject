@@ -1,0 +1,14 @@
+.git
+.github
+.env
+.env.*
+!.env.example
+**/node_modules
+**/dist
+coverage
+coverage.*
+*.out
+*.exe
+*.log
+frontend/src
+frontend/public
