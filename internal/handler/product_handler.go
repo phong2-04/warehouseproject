@@ -13,7 +13,7 @@ import (
 	"warehouseproject/internal/repository"
 )
 
-// ProductHandler xÃƒÂ¡Ã‚Â»Ã‚Â­ lÃƒÆ’Ã‚Â½ cÃƒÆ’Ã‚Â¡c API sÃƒÂ¡Ã‚ÂºÃ‚Â£n phÃƒÂ¡Ã‚ÂºÃ‚Â©m.
+// ProductHandler xử lý các API sản phẩm.
 type ProductHandler struct {
 	ProductRepo *repository.ProductRepository
 }
@@ -25,7 +25,7 @@ func NewProductHandler(repo *repository.ProductRepository) *ProductHandler {
 func (h *ProductHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	path := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/products"), "/")
 
-	// ChÃƒÂ¡Ã‚Â»Ã¢â‚¬Â° admin Ãƒâ€žÃ¢â‚¬ËœÃƒâ€ Ã‚Â°ÃƒÂ¡Ã‚Â»Ã‚Â£c thÃƒÆ’Ã‚Âªm, sÃƒÂ¡Ã‚Â»Ã‚Â­a hoÃƒÂ¡Ã‚ÂºÃ‚Â·c xÃƒÆ’Ã‚Â³a sÃƒÂ¡Ã‚ÂºÃ‚Â£n phÃƒÂ¡Ã‚ÂºÃ‚Â©m.
+	// Chỉ admin được thêm, sửa hoặc xóa sản phẩm.
 	role, _ := r.Context().Value(middleware.RoleKey).(string)
 
 	switch r.Method {
