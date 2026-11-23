@@ -5,8 +5,10 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"warehouseproject/internal/service"
 )
@@ -257,5 +259,85 @@ func TestAuthHandlerLogout(t *testing.T) {
 				t.Errorf("refresh token chua duoc trim: %q", fake.refreshToken)
 			}
 		})
+	}
+}
+
+func TestAuthHandlerUsernameRateLimitAcrossIPs(t *testing.T) {
+	fake := &fakeAuthUserService{
+		loginErr: service.ErrInvalidCredentials,
+	}
+	handler := NewAuthHandler(fake)
+
+	// Cung mot username dang nhap sai tu 10 IP khac nhau.
+	for i := 1; i <= maxUsernameFailures; i++ {
+		recorder, req := newAuthTestRequest(
+			http.MethodPost,
+			`{"username":"target-user","password":"wrong"}`,
+		)
+		req.RemoteAddr = "192.168.1." + strconv.Itoa(i) + ":12345"
+
+		handler.Login(recorder, req)
+
+		if recorder.Code != http.StatusUnauthorized {
+			t.Fatalf("lan %d: status = %d, muon 401", i, recorder.Code)
+		}
+	}
+
+	if fake.loginCalls != maxUsernameFailures {
+		t.Fatalf("Login duoc goi %d lan, muon %d", fake.loginCalls, maxUsernameFailures)
+	}
+
+	// IP moi van khong the thu dang nhap username da bi khoa.
+	recorder, req := newAuthTestRequest(
+		http.MethodPost,
+		`{"username":"target-user","password":"wrong"}`,
+	)
+	req.RemoteAddr = "192.168.2.1:12345"
+	handler.Login(recorder, req)
+
+	if recorder.Code != http.StatusTooManyRequests {
+		t.Errorf("username bi khoa: status = %d, muon 429", recorder.Code)
+	}
+
+	if recorder.Header().Get("Retry-After") == "" {
+		t.Error("thieu Retry-After khi username bi khoa")
+	}
+
+	if fake.loginCalls != maxUsernameFailures {
+		t.Errorf("Login van duoc goi khi username bi khoa: %d lan", fake.loginCalls)
+	}
+
+	// Username khac van dang nhap duoc, khong bi khoa theo username cu.
+	recorder, req = newAuthTestRequest(
+		http.MethodPost,
+		`{"username":"other-user","password":"wrong"}`,
+	)
+	req.RemoteAddr = "192.168.2.2:12345"
+	handler.Login(recorder, req)
+
+	if recorder.Code != http.StatusUnauthorized {
+		t.Errorf("username khac: status = %d, muon 401", recorder.Code)
+	}
+
+	if fake.loginCalls != maxUsernameFailures+1 {
+		t.Errorf("Login duoc goi %d lan, muon %d", fake.loginCalls, maxUsernameFailures+1)
+	}
+}
+
+func TestUsernameLimiterUnlocksAfterFiveMinutes(t *testing.T) {
+	limiter := newUsernameAttemptLimiter()
+	now := time.Now()
+
+	for i := 0; i < maxUsernameFailures; i++ {
+		limiter.recordFailure("target-user", now)
+	}
+
+	if got := limiter.retryAfter("target-user", now); got <= 0 {
+		t.Fatal("username phai bi khoa sau 10 lan dang nhap sai")
+	}
+
+	unlockTime := now.Add(usernameLockDuration)
+	if got := limiter.retryAfter("target-user", unlockTime); got != 0 {
+		t.Errorf("username van bi khoa sau 5 phut, Retry-After = %d", got)
 	}
 }

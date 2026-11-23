@@ -19,8 +19,9 @@ type authUserService interface {
 }
 
 type AuthHandler struct {
-	UserService  authUserService
-	loginLimiter *loginAttemptLimiter
+	UserService     authUserService
+	loginLimiter    *loginAttemptLimiter
+	usernameLimiter *loginAttemptLimiter
 }
 
 type LoginRequest struct {
@@ -34,8 +35,9 @@ type RefreshTokenRequest struct {
 
 func NewAuthHandler(userService authUserService) *AuthHandler {
 	return &AuthHandler{
-		UserService:  userService,
-		loginLimiter: newLoginAttemptLimiter(),
+		UserService:     userService,
+		loginLimiter:    newLoginAttemptLimiter(),
+		usernameLimiter: newUsernameAttemptLimiter(),
 	}
 }
 
@@ -75,11 +77,20 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if retryAfter := h.usernameLimiter.retryAfter(req.Username, time.Now()); retryAfter > 0 {
+		w.Header().Set("Retry-After", strconv.Itoa(retryAfter))
+		writeJSON(w, http.StatusTooManyRequests, map[string]string{
+			"error": "Tai khoan tam thoi bi gioi han dang nhap. Vui long thu lai sau.",
+		})
+		return
+	}
+
 	result, err := h.UserService.Login(r.Context(), req.Username, req.Password)
 	if err != nil {
 		switch {
 		case errors.Is(err, service.ErrInvalidCredentials):
 			h.loginLimiter.recordFailure(clientIP, time.Now())
+			h.usernameLimiter.recordFailure(req.Username, time.Now())
 			writeJSON(w, http.StatusUnauthorized, map[string]string{
 				"error": err.Error(),
 			})
@@ -96,6 +107,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.loginLimiter.reset(clientIP)
+	h.usernameLimiter.reset(req.Username)
 	writeJSON(w, http.StatusOK, result)
 }
 

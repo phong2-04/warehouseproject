@@ -12,6 +12,11 @@ const (
 	loginFailureWindow = 15 * time.Minute
 	loginLockDuration  = 15 * time.Minute
 	maxTrackedLoginIPs = 10000
+
+	maxUsernameFailures   = 10
+	usernameFailureWindow = 15 * time.Minute
+	usernameLockDuration  = 5 * time.Minute
+	maxTrackedUsernames   = 10000
 )
 
 type loginAttempt struct {
@@ -22,13 +27,44 @@ type loginAttempt struct {
 }
 
 type loginAttemptLimiter struct {
-	mu       sync.Mutex
-	attempts map[string]*loginAttempt
+	mu          sync.Mutex
+	attempts    map[string]*loginAttempt
+	maxFailures int
+	window      time.Duration
+	lock        time.Duration
+	maxTracked  int
 }
 
 func newLoginAttemptLimiter() *loginAttemptLimiter {
+	return newConfiguredLoginAttemptLimiter(
+		maxLoginFailures,
+		loginFailureWindow,
+		loginLockDuration,
+		maxTrackedLoginIPs,
+	)
+}
+
+func newUsernameAttemptLimiter() *loginAttemptLimiter {
+	return newConfiguredLoginAttemptLimiter(
+		maxUsernameFailures,
+		usernameFailureWindow,
+		usernameLockDuration,
+		maxTrackedUsernames,
+	)
+}
+
+func newConfiguredLoginAttemptLimiter(
+	maxFailures int,
+	window time.Duration,
+	lock time.Duration,
+	maxTracked int,
+) *loginAttemptLimiter {
 	return &loginAttemptLimiter{
-		attempts: make(map[string]*loginAttempt),
+		attempts:    make(map[string]*loginAttempt),
+		maxFailures: maxFailures,
+		window:      window,
+		lock:        lock,
+		maxTracked:  maxTracked,
 	}
 }
 
@@ -42,12 +78,12 @@ func getClientIP(r *http.Request) string {
 	return r.RemoteAddr
 }
 
-// Tra ve so giay con lai neu IP dang bi khoa.
-func (l *loginAttemptLimiter) retryAfter(ip string, now time.Time) int {
+// Tra ve so giay con lai neu key dang bi khoa.
+func (l *loginAttemptLimiter) retryAfter(key string, now time.Time) int {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	attempt, exists := l.attempts[ip]
+	attempt, exists := l.attempts[key]
 	if !exists {
 		return 0
 	}
@@ -63,47 +99,47 @@ func (l *loginAttemptLimiter) retryAfter(ip string, now time.Time) int {
 	}
 
 	if !attempt.lockedUntil.IsZero() ||
-		now.Sub(attempt.windowStart) >= loginFailureWindow {
-		delete(l.attempts, ip)
+		now.Sub(attempt.windowStart) >= l.window {
+		delete(l.attempts, key)
 	}
 
 	return 0
 }
 
 // Ghi nhan mot lan dang nhap sai.
-func (l *loginAttemptLimiter) recordFailure(ip string, now time.Time) {
+func (l *loginAttemptLimiter) recordFailure(key string, now time.Time) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	// Don cac IP da het thoi gian theo doi.
-	for key, attempt := range l.attempts {
+	// Don cac key da het thoi gian theo doi.
+	for trackedKey, attempt := range l.attempts {
 		if !attempt.lockedUntil.After(now) &&
-			now.Sub(attempt.windowStart) >= loginFailureWindow {
-			delete(l.attempts, key)
+			now.Sub(attempt.windowStart) >= l.window {
+			delete(l.attempts, trackedKey)
 		}
 	}
 
-	attempt, exists := l.attempts[ip]
+	attempt, exists := l.attempts[key]
 
 	if exists && attempt.lockedUntil.After(now) {
 		return
 	}
 
 	if !exists {
-		// Neu day bo nho, xoa IP cu nhat truoc khi them IP moi.
-		if len(l.attempts) >= maxTrackedLoginIPs {
-			var oldestIP string
+		// Gioi han bo nho bang cach xoa key cu nhat.
+		if len(l.attempts) >= l.maxTracked {
+			var oldestKey string
 			var oldestTime time.Time
 
-			for key, item := range l.attempts {
-				if oldestIP == "" || item.lastSeen.Before(oldestTime) {
-					oldestIP = key
+			for trackedKey, item := range l.attempts {
+				if oldestKey == "" || item.lastSeen.Before(oldestTime) {
+					oldestKey = trackedKey
 					oldestTime = item.lastSeen
 				}
 			}
 
-			if oldestIP != "" {
-				delete(l.attempts, oldestIP)
+			if oldestKey != "" {
+				delete(l.attempts, oldestKey)
 			}
 		}
 
@@ -111,27 +147,27 @@ func (l *loginAttemptLimiter) recordFailure(ip string, now time.Time) {
 			windowStart: now,
 			lastSeen:    now,
 		}
-		l.attempts[ip] = attempt
-	} else if now.Sub(attempt.windowStart) >= loginFailureWindow {
+		l.attempts[key] = attempt
+	} else if now.Sub(attempt.windowStart) >= l.window {
 		attempt = &loginAttempt{
 			windowStart: now,
 			lastSeen:    now,
 		}
-		l.attempts[ip] = attempt
+		l.attempts[key] = attempt
 	}
 
 	attempt.failures++
 	attempt.lastSeen = now
 
-	if attempt.failures >= maxLoginFailures {
-		attempt.lockedUntil = now.Add(loginLockDuration)
+	if attempt.failures >= l.maxFailures {
+		attempt.lockedUntil = now.Add(l.lock)
 	}
 }
 
 // Xoa bo dem khi dang nhap thanh cong.
-func (l *loginAttemptLimiter) reset(ip string) {
+func (l *loginAttemptLimiter) reset(key string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	delete(l.attempts, ip)
+	delete(l.attempts, key)
 }
