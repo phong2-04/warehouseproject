@@ -35,7 +35,7 @@ func checkProductMock(t *testing.T, mock pgxmock.PgxPoolIface) {
 func productColumns() []string {
 	return []string{
 		"id", "code", "name", "category_id", "price",
-		"quantity", "min_stock", "created_at", "updated_at",
+		"quantity", "min_stock", "created_at", "updated_at", "version",
 	}
 }
 
@@ -51,6 +51,7 @@ func productRow() *model.Product {
 		Price:      350000,
 		Quantity:   10,
 		MinStock:   5,
+		Version:    1,
 		CreatedAt:  now,
 		UpdatedAt:  now,
 	}
@@ -67,6 +68,7 @@ func addProductRow(rows *pgxmock.Rows, product *model.Product) *pgxmock.Rows {
 		product.MinStock,
 		product.CreatedAt,
 		product.UpdatedAt,
+		product.Version,
 	)
 }
 
@@ -89,8 +91,8 @@ func TestProductRepository_Create(t *testing.T) {
 		mock.ExpectQuery("INSERT INTO products").
 			WithArgs(product.Code, product.Name, product.CategoryID, product.Price, product.MinStock).
 			WillReturnRows(
-				pgxmock.NewRows([]string{"id", "created_at", "updated_at"}).
-					AddRow(int64(1), now, now),
+				pgxmock.NewRows([]string{"id", "version", "created_at", "updated_at"}).
+					AddRow(int64(1), int64(1), now, now),
 			)
 
 		err := repo.Create(context.Background(), product)
@@ -98,8 +100,8 @@ func TestProductRepository_Create(t *testing.T) {
 		if err != nil {
 			t.Fatalf("khong mong doi loi: %v", err)
 		}
-		if product.ID != 1 {
-			t.Errorf("ID mong doi 1, nhan duoc %d", product.ID)
+		if product.ID != 1 || product.Version != 1 {
+			t.Errorf("ID/version khong dung: ID=%d Version=%d", product.ID, product.Version)
 		}
 		if !product.CreatedAt.Equal(now) || !product.UpdatedAt.Equal(now) {
 			t.Error("thoi gian tao hoac cap nhat khong dung")
@@ -137,7 +139,6 @@ func TestProductRepository_GetAll(t *testing.T) {
 		defer mock.Close()
 
 		product := productRow()
-
 		rows := pgxmock.NewRows(productColumns())
 		addProductRow(rows, product)
 
@@ -152,7 +153,7 @@ func TestProductRepository_GetAll(t *testing.T) {
 		if len(result) != 1 {
 			t.Fatalf("mong doi 1 san pham, nhan duoc %d", len(result))
 		}
-		if result[0].Code != "SP001" || result[0].Quantity != 10 {
+		if result[0].Code != "SP001" || result[0].Quantity != 10 || result[0].Version != 1 {
 			t.Errorf("du lieu san pham khong dung: %+v", result[0])
 		}
 
@@ -182,7 +183,6 @@ func TestProductRepository_GetByID(t *testing.T) {
 		defer mock.Close()
 
 		product := productRow()
-
 		rows := pgxmock.NewRows(productColumns())
 		addProductRow(rows, product)
 
@@ -195,7 +195,7 @@ func TestProductRepository_GetByID(t *testing.T) {
 		if err != nil {
 			t.Fatalf("khong mong doi loi: %v", err)
 		}
-		if result.ID != 1 || result.Code != "SP001" {
+		if result.ID != 1 || result.Code != "SP001" || result.Version != 1 {
 			t.Errorf("du lieu san pham khong dung: %+v", result)
 		}
 
@@ -238,15 +238,21 @@ func TestProductRepository_GetByID(t *testing.T) {
 }
 
 func TestProductRepository_Update(t *testing.T) {
-	t.Run("success", func(t *testing.T) {
+	t.Run("success increments version", func(t *testing.T) {
 		mock, repo := newProductMock(t)
 		defer mock.Close()
 
 		product := productRow()
+
 		product.Name = "Ban phim moi"
 
+		updatedProduct := *product
+
+		updatedProduct.Version = 2
+
 		rows := pgxmock.NewRows(productColumns())
-		addProductRow(rows, product)
+
+		addProductRow(rows, &updatedProduct)
 
 		mock.ExpectQuery("UPDATE products").
 			WithArgs(
@@ -256,6 +262,7 @@ func TestProductRepository_Update(t *testing.T) {
 				product.Price,
 				product.MinStock,
 				product.ID,
+				int64(1),
 			).
 			WillReturnRows(rows)
 
@@ -264,8 +271,41 @@ func TestProductRepository_Update(t *testing.T) {
 		if err != nil {
 			t.Fatalf("khong mong doi loi: %v", err)
 		}
-		if product.Name != "Ban phim moi" {
-			t.Errorf("ten san pham khong duoc cap nhat")
+		if product.Name != "Ban phim moi" || product.Version != 2 {
+			t.Errorf("du lieu sau cap nhat khong dung: %+v", product)
+		}
+
+		checkProductMock(t, mock)
+	})
+
+	t.Run("version conflict", func(t *testing.T) {
+		mock, repo := newProductMock(t)
+		defer mock.Close()
+
+		product := productRow()
+
+		mock.ExpectQuery("UPDATE products").
+			WithArgs(
+				product.Code,
+				product.Name,
+				product.CategoryID,
+				product.Price,
+				product.MinStock,
+				product.ID,
+				product.Version,
+			).
+			WillReturnError(pgx.ErrNoRows)
+
+		mock.ExpectQuery("SELECT EXISTS").
+			WithArgs(product.ID).
+			WillReturnRows(
+				pgxmock.NewRows([]string{"exists"}).AddRow(true),
+			)
+
+		err := repo.Update(context.Background(), product)
+
+		if !IsProductVersionConflict(err) {
+			t.Errorf("mong doi loi version conflict, nhan duoc: %v", err)
 		}
 
 		checkProductMock(t, mock)
@@ -286,8 +326,15 @@ func TestProductRepository_Update(t *testing.T) {
 				product.Price,
 				product.MinStock,
 				product.ID,
+				product.Version,
 			).
 			WillReturnError(pgx.ErrNoRows)
+
+		mock.ExpectQuery("SELECT EXISTS").
+			WithArgs(product.ID).
+			WillReturnRows(
+				pgxmock.NewRows([]string{"exists"}).AddRow(false),
+			)
 
 		err := repo.Update(context.Background(), product)
 
@@ -312,6 +359,7 @@ func TestProductRepository_Update(t *testing.T) {
 				product.Price,
 				product.MinStock,
 				product.ID,
+				product.Version,
 			).
 			WillReturnError(errors.New("database error"))
 
@@ -401,8 +449,8 @@ func TestProductRepository_GetLowStock(t *testing.T) {
 		if len(result) != 1 {
 			t.Fatalf("mong doi 1 san pham sap het hang, nhan duoc %d", len(result))
 		}
-		if result[0].Quantity > result[0].MinStock {
-			t.Error("san pham khong thoa dieu kien ton kho thap")
+		if result[0].Quantity > result[0].MinStock || result[0].Version != 1 {
+			t.Error("du lieu san pham sap het hang khong dung")
 		}
 
 		checkProductMock(t, mock)
@@ -431,6 +479,16 @@ func TestIsNotFound(t *testing.T) {
 	}
 
 	if IsNotFound(errors.New("database error")) {
+		t.Error("mong doi false voi loi khac")
+	}
+}
+
+func TestIsProductVersionConflict(t *testing.T) {
+	if !IsProductVersionConflict(ErrProductVersionConflict) {
+		t.Error("mong doi true voi version conflict")
+	}
+
+	if IsProductVersionConflict(errors.New("database error")) {
 		t.Error("mong doi false voi loi khac")
 	}
 }

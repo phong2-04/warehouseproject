@@ -11,6 +11,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+var ErrProductVersionConflict = errors.New("product version conflict")
+
 type productDB interface {
 	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
 	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
@@ -25,7 +27,6 @@ func NewProductRepository(db *pgxpool.Pool) *ProductRepository {
 	return &ProductRepository{DB: db}
 }
 
-// NewProductRepositoryWithDB hỗ trợ tạo Repository bằng mock khi kiểm thử.
 func NewProductRepositoryWithDB(db productDB) *ProductRepository {
 	return &ProductRepository{DB: db}
 }
@@ -35,11 +36,11 @@ func (r *ProductRepository) Create(
 	product *model.Product,
 ) error {
 	query := `
-		INSERT INTO products
-			(code, name, category_id, price, quantity, min_stock)
-		VALUES ($1, $2, $3, $4, 0, $5)
-		RETURNING id, created_at, updated_at
-	`
+INSERT INTO products
+(code, name, category_id, price, quantity, min_stock)
+VALUES ($1, $2, $3, $4, 0, $5)
+RETURNING id, version, created_at, updated_at
+`
 
 	return r.DB.QueryRow(
 		ctx,
@@ -51,6 +52,7 @@ func (r *ProductRepository) Create(
 		product.MinStock,
 	).Scan(
 		&product.ID,
+		&product.Version,
 		&product.CreatedAt,
 		&product.UpdatedAt,
 	)
@@ -60,11 +62,11 @@ func (r *ProductRepository) GetAll(
 	ctx context.Context,
 ) ([]model.Product, error) {
 	query := `
-		SELECT id, code, name, category_id, price,
-		       quantity, min_stock, created_at, updated_at
-		FROM products
-		ORDER BY id
-	`
+SELECT id, code, name, category_id, price,
+       quantity, min_stock, created_at, updated_at, version
+FROM products
+ORDER BY id
+`
 
 	rows, err := r.DB.Query(ctx, query)
 	if err != nil {
@@ -87,6 +89,7 @@ func (r *ProductRepository) GetAll(
 			&product.MinStock,
 			&product.CreatedAt,
 			&product.UpdatedAt,
+			&product.Version,
 		); err != nil {
 			return nil, err
 		}
@@ -106,11 +109,11 @@ func (r *ProductRepository) GetByID(
 	id int64,
 ) (*model.Product, error) {
 	query := `
-		SELECT id, code, name, category_id, price,
-		       quantity, min_stock, created_at, updated_at
-		FROM products
-		WHERE id = $1
-	`
+SELECT id, code, name, category_id, price,
+       quantity, min_stock, created_at, updated_at, version
+FROM products
+WHERE id = $1
+`
 
 	var product model.Product
 
@@ -124,6 +127,7 @@ func (r *ProductRepository) GetByID(
 		&product.MinStock,
 		&product.CreatedAt,
 		&product.UpdatedAt,
+		&product.Version,
 	)
 	if err != nil {
 		return nil, err
@@ -137,19 +141,20 @@ func (r *ProductRepository) Update(
 	product *model.Product,
 ) error {
 	query := `
-		UPDATE products
-		SET code = $1,
-		    name = $2,
-		    category_id = $3,
-		    price = $4,
-		    min_stock = $5,
-		    updated_at = NOW()
-		WHERE id = $6
-		RETURNING id, code, name, category_id, price,
-		          quantity, min_stock, created_at, updated_at
-	`
+UPDATE products
+SET code = $1,
+    name = $2,
+    category_id = $3,
+    price = $4,
+    min_stock = $5,
+    version = version + 1,
+    updated_at = NOW()
+WHERE id = $6 AND version = $7
+RETURNING id, code, name, category_id, price,
+          quantity, min_stock, created_at, updated_at, version
+`
 
-	return r.DB.QueryRow(
+	err := r.DB.QueryRow(
 		ctx,
 		query,
 		product.Code,
@@ -158,6 +163,7 @@ func (r *ProductRepository) Update(
 		product.Price,
 		product.MinStock,
 		product.ID,
+		product.Version,
 	).Scan(
 		&product.ID,
 		&product.Code,
@@ -168,7 +174,25 @@ func (r *ProductRepository) Update(
 		&product.MinStock,
 		&product.CreatedAt,
 		&product.UpdatedAt,
+		&product.Version,
 	)
+
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return err
+	}
+
+	var exists bool
+	checkQuery := `SELECT EXISTS(SELECT 1 FROM products WHERE id = $1)`
+
+	if checkErr := r.DB.QueryRow(ctx, checkQuery, product.ID).Scan(&exists); checkErr != nil {
+		return checkErr
+	}
+
+	if exists {
+		return ErrProductVersionConflict
+	}
+
+	return pgx.ErrNoRows
 }
 
 func (r *ProductRepository) Delete(
@@ -195,16 +219,20 @@ func IsNotFound(err error) bool {
 	return errors.Is(err, pgx.ErrNoRows)
 }
 
+func IsProductVersionConflict(err error) bool {
+	return errors.Is(err, ErrProductVersionConflict)
+}
+
 func (r *ProductRepository) GetLowStock(
 	ctx context.Context,
 ) ([]model.Product, error) {
 	query := `
-		SELECT id, code, name, category_id, price,
-		       quantity, min_stock, created_at, updated_at
-		FROM products
-		WHERE quantity <= min_stock
-		ORDER BY quantity ASC, id ASC
-	`
+SELECT id, code, name, category_id, price,
+       quantity, min_stock, created_at, updated_at, version
+FROM products
+WHERE quantity <= min_stock
+ORDER BY quantity ASC, id ASC
+`
 
 	rows, err := r.DB.Query(ctx, query)
 	if err != nil {
@@ -227,6 +255,7 @@ func (r *ProductRepository) GetLowStock(
 			&product.MinStock,
 			&product.CreatedAt,
 			&product.UpdatedAt,
+			&product.Version,
 		); err != nil {
 			return nil, err
 		}

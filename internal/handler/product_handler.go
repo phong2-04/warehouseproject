@@ -141,6 +141,7 @@ type productUpdateRequest struct {
 	CategoryID *int64  `json:"category_id"`
 	Price      float64 `json:"price"`
 	MinStock   int     `json:"min_stock"`
+	Version    int64   `json:"version"`
 }
 
 func (h *ProductHandler) Update(w http.ResponseWriter, r *http.Request, rawID string) {
@@ -175,6 +176,12 @@ func (h *ProductHandler) Update(w http.ResponseWriter, r *http.Request, rawID st
 	product.CategoryID = request.CategoryID
 	product.Price = request.Price
 	product.MinStock = request.MinStock
+	product.Version = request.Version
+
+	if request.Version <= 0 {
+		writeProductError(w, http.StatusBadRequest, "Version san pham khong hop le")
+		return
+	}
 
 	if !validProduct(product) {
 		writeProductError(w, http.StatusBadRequest, "Thong tin san pham khong hop le")
@@ -184,6 +191,10 @@ func (h *ProductHandler) Update(w http.ResponseWriter, r *http.Request, rawID st
 	if err := h.ProductRepo.Update(r.Context(), product); err != nil {
 		if repository.IsNotFound(err) {
 			writeProductError(w, http.StatusNotFound, "Khong tim thay san pham")
+			return
+		}
+		if repository.IsProductVersionConflict(err) {
+			writeProductError(w, http.StatusConflict, "San pham da duoc cap nhat boi nguoi khac. Vui long tai lai du lieu.")
 			return
 		}
 		if repository.IsUniqueViolation(err) {

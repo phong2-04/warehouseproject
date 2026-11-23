@@ -1,4 +1,4 @@
-﻿
+
 import { useEffect, useState } from 'react'
 import { apiRequest, login } from './api/client'
 import './App.css'
@@ -359,6 +359,7 @@ const [stockForm, setStockForm] = useState({
       category_id: product.category_id
         ? String(product.category_id)
         : '',
+      version: product.version,
     })
     setShowProductForm(false)
     setError('')
@@ -374,14 +375,24 @@ const [stockForm, setStockForm] = useState({
     try {
       await apiRequest(`/products/${editingProductId}`, {
         method: 'PUT',
-        body: JSON.stringify(makeProductPayload(editProduct, false)),
+        body: JSON.stringify({
+          ...makeProductPayload(editProduct, false),
+          version: editProduct.version,
+        }),
       })
 
       setEditingProductId(null)
       setEditProduct({ ...emptyProduct })
       await loadProducts()
     } catch (err) {
-      setError(err.message)
+      if (err.message.includes('San pham da duoc cap nhat boi nguoi khac')) {
+        setEditingProductId(null)
+        setEditProduct({ ...emptyProduct })
+        await loadProducts()
+        setError('Sản phẩm đã được người khác cập nhật. Danh sách đã được tải lại, hãy chọn sản phẩm và sửa lại.')
+      } else {
+        setError(err.message)
+      }
     } finally {
       setSaving(false)
     }

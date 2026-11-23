@@ -35,10 +35,10 @@ func newProductHandlerMock(t *testing.T) (*ProductHandler, pgxmock.PgxPoolIface)
 func productTestRows() *pgxmock.Rows {
 	return pgxmock.NewRows([]string{
 		"id", "code", "name", "category_id", "price",
-		"quantity", "min_stock", "created_at", "updated_at",
+		"quantity", "min_stock", "created_at", "updated_at", "version",
 	}).AddRow(
 		int64(1), "SP001", "Ban phim co", nil, 350000.0,
-		10, 5, time.Now(), time.Now(),
+		10, 5, time.Now(), time.Now(), int64(1),
 	)
 }
 
@@ -128,10 +128,10 @@ func TestProductHandlerCreate(t *testing.T) {
 		mock.ExpectQuery("INSERT INTO products").
 			WithArgs("SP001", "Ban phim co", pgxmock.AnyArg(), 350000.0, 5).
 			WillReturnRows(pgxmock.NewRows([]string{
-				"id", "created_at", "updated_at",
-			}).AddRow(int64(1), time.Now(), time.Now()))
+				"id", "version", "created_at", "updated_at",
+			}).AddRow(int64(1), int64(1), time.Now(), time.Now()))
 
-		body := `{"code":" SP001 ","name":" Ban phim co ","price":350000,"quantity":99,"min_stock":5}`
+		body := `{"code":" SP001 ","name":" Ban phim co ","price":350000,"quantity":99,"min_stock":5,"version":1}`
 		rec := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodPost, "/api/products", strings.NewReader(body))
 		h.Create(rec, req)
@@ -151,10 +151,10 @@ func TestProductHandlerCreate(t *testing.T) {
 		wantStatus int
 	}{
 		{"JSON khong hop le", `{"code":`, nil, http.StatusBadRequest},
-		{"du lieu khong hop le", `{"code":"","name":"Test","price":100,"min_stock":5}`, nil, http.StatusBadRequest},
-		{"ma san pham bi trung", `{"code":"SP001","name":"Test","price":100,"min_stock":5}`, &pgconn.PgError{Code: "23505"}, http.StatusConflict},
-		{"category khong ton tai", `{"code":"SP002","name":"Test","category_id":1,"price":100,"min_stock":5}`, &pgconn.PgError{Code: "23503"}, http.StatusBadRequest},
-		{"loi database", `{"code":"SP003","name":"Test","price":100,"min_stock":5}`, errors.New("database error"), http.StatusInternalServerError},
+		{"du lieu khong hop le", `{"code":"","name":"Test","price":100,"min_stock":5,"version":1}`, nil, http.StatusBadRequest},
+		{"ma san pham bi trung", `{"code":"SP001","name":"Test","price":100,"min_stock":5,"version":1}`, &pgconn.PgError{Code: "23505"}, http.StatusConflict},
+		{"category khong ton tai", `{"code":"SP002","name":"Test","category_id":1,"price":100,"min_stock":5,"version":1}`, &pgconn.PgError{Code: "23503"}, http.StatusBadRequest},
+		{"loi database", `{"code":"SP003","name":"Test","price":100,"min_stock":5,"version":1}`, errors.New("database error"), http.StatusInternalServerError},
 	}
 
 	for _, tt := range tests {
@@ -191,7 +191,7 @@ func TestProductHandlerCreate(t *testing.T) {
 }
 
 func TestProductHandlerUpdate(t *testing.T) {
-	validBody := `{"code":"SP002","name":"Chuot khong day","price":200000,"min_stock":3}`
+	validBody := `{"code":"SP002","name":"Chuot khong day","price":200000,"min_stock":3,"version":1}`
 
 	t.Run("thanh cong", func(t *testing.T) {
 		h, mock := newProductHandlerMock(t)
@@ -201,12 +201,12 @@ func TestProductHandlerUpdate(t *testing.T) {
 			WillReturnRows(productTestRows())
 
 		mock.ExpectQuery("UPDATE products").
-			WithArgs("SP002", "Chuot khong day", pgxmock.AnyArg(), 200000.0, 3, int64(1)).
+			WithArgs("SP002", "Chuot khong day", pgxmock.AnyArg(), 200000.0, 3, int64(1), int64(1)).
 			WillReturnRows(pgxmock.NewRows([]string{
 				"id", "code", "name", "category_id", "price",
-				"quantity", "min_stock", "created_at", "updated_at",
+				"quantity", "min_stock", "created_at", "updated_at", "version",
 			}).AddRow(int64(1), "SP002", "Chuot khong day", nil, 200000.0,
-				10, 3, time.Now(), time.Now()))
+				10, 3, time.Now(), time.Now(), int64(2)))
 
 		rec := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodPut, "/api/products/1", strings.NewReader(validBody))
@@ -275,7 +275,7 @@ func TestProductHandlerUpdate(t *testing.T) {
 			WithArgs(int64(1)).
 			WillReturnRows(productTestRows())
 
-		body := `{"code":"","name":"Test","price":100,"min_stock":5}`
+		body := `{"code":"","name":"Test","price":100,"min_stock":5,"version":1}`
 		rec := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodPut, "/api/products/1", strings.NewReader(body))
 		h.Update(rec, req, "1")
@@ -305,8 +305,15 @@ func TestProductHandlerUpdate(t *testing.T) {
 				WillReturnRows(productTestRows())
 
 			mock.ExpectQuery("UPDATE products").
-				WithArgs("SP002", "Chuot khong day", pgxmock.AnyArg(), 200000.0, 3, int64(1)).
+				WithArgs("SP002", "Chuot khong day", pgxmock.AnyArg(), 200000.0, 3, int64(1), int64(1)).
 				WillReturnError(tt.err)
+			if errors.Is(tt.err, pgx.ErrNoRows) {
+				mock.ExpectQuery("SELECT EXISTS").
+					WithArgs(int64(1)).
+					WillReturnRows(
+						pgxmock.NewRows([]string{"exists"}).AddRow(false),
+					)
+			}
 
 			rec := httptest.NewRecorder()
 			req := httptest.NewRequest(http.MethodPut, "/api/products/1", strings.NewReader(validBody))
@@ -320,6 +327,37 @@ func TestProductHandlerUpdate(t *testing.T) {
 	}
 }
 
+func TestProductHandlerUpdateVersionConflict(t *testing.T) {
+	h, mock := newProductHandlerMock(t)
+
+	mock.ExpectQuery("SELECT id, code, name").
+		WithArgs(int64(1)).
+		WillReturnRows(productTestRows())
+
+	mock.ExpectQuery("UPDATE products").
+		WithArgs("SP002", "Chuot khong day", pgxmock.AnyArg(), 200000.0, 3, int64(1), int64(1)).
+		WillReturnError(pgx.ErrNoRows)
+
+	mock.ExpectQuery("SELECT EXISTS").
+		WithArgs(int64(1)).
+		WillReturnRows(
+			pgxmock.NewRows([]string{"exists"}).AddRow(true),
+		)
+
+	body := `{"code":"SP002","name":"Chuot khong day","price":200000,"min_stock":3,"version":1}`
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPut, "/api/products/1", strings.NewReader(body))
+
+	h.Update(rec, req, "1")
+
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want 409; body: %s", rec.Code, rec.Body.String())
+	}
+
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("mock expectations: %v", err)
+	}
+}
 func TestProductHandlerDelete(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -468,11 +506,11 @@ func TestProductHandlerServeHTTP(t *testing.T) {
 		mock.ExpectQuery("INSERT INTO products").
 			WithArgs("SP001", "Ban phim co", pgxmock.AnyArg(), 350000.0, 5).
 			WillReturnRows(pgxmock.NewRows([]string{
-				"id", "created_at", "updated_at",
-			}).AddRow(int64(1), time.Now(), time.Now()))
+				"id", "version", "created_at", "updated_at",
+			}).AddRow(int64(1), int64(1), time.Now(), time.Now()))
 
 		ctx := context.WithValue(context.Background(), middleware.RoleKey, "admin")
-		body := `{"code":"SP001","name":"Ban phim co","price":350000,"min_stock":5}`
+		body := `{"code":"SP001","name":"Ban phim co","price":350000,"min_stock":5,"version":1}`
 
 		rec := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodPost, "/api/products", strings.NewReader(body)).WithContext(ctx)
