@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http/httptest"
+	"strconv"
 	"testing"
 	"time"
 )
@@ -113,5 +114,44 @@ func TestGetClientIP_WithoutPort(t *testing.T) {
 
 	if got != "192.168.1.21" {
 		t.Errorf("IP khong dung: nhan %s", got)
+	}
+}
+
+func TestLoginAttemptLimiter_MaxTrackedIPs(t *testing.T) {
+	limiter := newLoginAttemptLimiter()
+	now := time.Now()
+
+	oldestIP := "oldest-ip"
+
+	limiter.attempts[oldestIP] = &loginAttempt{
+		windowStart: now,
+		lastSeen:    now.Add(-24 * time.Hour),
+	}
+
+	for i := 1; i < maxTrackedLoginIPs; i++ {
+		ip := "ip-" + strconv.Itoa(i)
+		limiter.attempts[ip] = &loginAttempt{
+			windowStart: now,
+			lastSeen:    now.Add(-time.Duration(i) * time.Second),
+		}
+	}
+
+	newIP := "new-ip"
+	limiter.recordFailure(newIP, now)
+
+	if len(limiter.attempts) > maxTrackedLoginIPs {
+		t.Fatalf(
+			"So IP vuot gioi han: %d, toi da %d",
+			len(limiter.attempts),
+			maxTrackedLoginIPs,
+		)
+	}
+
+	if _, exists := limiter.attempts[oldestIP]; exists {
+		t.Error("IP cu nhat phai bi xoa khi vuot gioi han")
+	}
+
+	if _, exists := limiter.attempts[newIP]; !exists {
+		t.Error("IP moi phai duoc theo doi")
 	}
 }

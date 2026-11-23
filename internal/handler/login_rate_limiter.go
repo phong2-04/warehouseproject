@@ -89,28 +89,35 @@ func (l *loginAttemptLimiter) recordFailure(ip string, now time.Time) {
 		return
 	}
 
-	if !exists || now.Sub(attempt.windowStart) >= loginFailureWindow {
-		attempt = &loginAttempt{
-			windowStart: now,
-		}
-		l.attempts[ip] = attempt
-	}
+	if !exists {
+		// Neu day bo nho, xoa IP cu nhat truoc khi them IP moi.
+		if len(l.attempts) >= maxTrackedLoginIPs {
+			var oldestIP string
+			var oldestTime time.Time
 
-	// Gioi han so IP duoc theo doi trong bo nho.
-	if !exists && len(l.attempts) > maxTrackedLoginIPs {
-		var oldestIP string
-		var oldestTime time.Time
+			for key, item := range l.attempts {
+				if oldestIP == "" || item.lastSeen.Before(oldestTime) {
+					oldestIP = key
+					oldestTime = item.lastSeen
+				}
+			}
 
-		for key, item := range l.attempts {
-			if oldestIP == "" || item.lastSeen.Before(oldestTime) {
-				oldestIP = key
-				oldestTime = item.lastSeen
+			if oldestIP != "" {
+				delete(l.attempts, oldestIP)
 			}
 		}
 
-		if oldestIP != "" && oldestIP != ip {
-			delete(l.attempts, oldestIP)
+		attempt = &loginAttempt{
+			windowStart: now,
+			lastSeen:    now,
 		}
+		l.attempts[ip] = attempt
+	} else if now.Sub(attempt.windowStart) >= loginFailureWindow {
+		attempt = &loginAttempt{
+			windowStart: now,
+			lastSeen:    now,
+		}
+		l.attempts[ip] = attempt
 	}
 
 	attempt.failures++
