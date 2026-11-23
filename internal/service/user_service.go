@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -61,9 +62,15 @@ func (s *UserService) generateToken(
 	tokenType string,
 	duration time.Duration,
 ) (string, error) {
+	jti := make([]byte, 16)
+	if _, err := rand.Read(jti); err != nil {
+		return "", err
+	}
+
 	now := time.Now()
 
 	claims := jwt.MapClaims{
+		"jti":        hex.EncodeToString(jti),
 		"user_id":    user.ID,
 		"username":   user.Username,
 		"role":       user.Role,

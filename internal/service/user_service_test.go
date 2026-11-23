@@ -256,3 +256,57 @@ func TestUserServiceRequiresJWTSecret(t *testing.T) {
 			err, ErrJWTSecretRequired)
 	}
 }
+
+func TestGenerateTokenUniqueJTI(t *testing.T) {
+	service := &UserService{
+		JWTSecret: []byte("test-secret"),
+	}
+
+	user := &model.User{
+		ID:       1,
+		Username: "testuser",
+		Role:     "admin",
+	}
+
+	firstToken, err := service.generateToken(user, "refresh", RefreshTokenDuration)
+	if err != nil {
+		t.Fatalf("Tao token thu nhat that bai: %v", err)
+	}
+
+	secondToken, err := service.generateToken(user, "refresh", RefreshTokenDuration)
+	if err != nil {
+		t.Fatalf("Tao token thu hai that bai: %v", err)
+	}
+
+	if firstToken == secondToken {
+		t.Fatal("Hai JWT tao lien tiep khong duoc trung nhau")
+	}
+
+	parseJTI := func(tokenString string) string {
+		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+			return service.JWTSecret, nil
+		})
+		if err != nil {
+			t.Fatalf("Parse JWT that bai: %v", err)
+		}
+
+		claims, ok := token.Claims.(jwt.MapClaims)
+		if !ok {
+			t.Fatal("Claims khong hop le")
+		}
+
+		jti, ok := claims["jti"].(string)
+		if !ok || jti == "" {
+			t.Fatal("JWT khong co JTI hop le")
+		}
+
+		return jti
+	}
+
+	firstJTI := parseJTI(firstToken)
+	secondJTI := parseJTI(secondToken)
+
+	if firstJTI == secondJTI {
+		t.Fatal("JTI cua hai token bi trung nhau")
+	}
+}
