@@ -15,6 +15,16 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+var dummyPasswordHash = func() []byte {
+	hash, err := bcrypt.GenerateFromPassword(
+		[]byte("warehouse-invalid-login-dummy-password"),
+		bcrypt.DefaultCost,
+	)
+	if err != nil {
+		panic("Khong the tao dummy bcrypt hash: " + err.Error())
+	}
+	return hash
+}()
 var (
 	ErrInvalidCredentials  = errors.New("username hoac password khong dung")
 	ErrJWTSecretRequired   = errors.New("JWT secret khong duoc de trong")
@@ -105,6 +115,10 @@ func (s *UserService) Login(
 	}
 
 	if user == nil {
+		_ = bcrypt.CompareHashAndPassword(
+			dummyPasswordHash,
+			[]byte(password),
+		)
 		return nil, ErrInvalidCredentials
 	}
 
@@ -113,6 +127,12 @@ func (s *UserService) Login(
 		[]byte(password),
 	)
 	if err != nil {
+		if !errors.Is(err, bcrypt.ErrMismatchedHashAndPassword) {
+			_ = bcrypt.CompareHashAndPassword(
+				dummyPasswordHash,
+				[]byte(password),
+			)
+		}
 		return nil, ErrInvalidCredentials
 	}
 

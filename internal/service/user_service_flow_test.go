@@ -530,3 +530,24 @@ func TestUserService_RefreshTokenExpiry(t *testing.T) {
 		t.Errorf("Muon ErrInvalidRefreshToken, nhan duoc: %v", err)
 	}
 }
+
+func TestDummyPasswordHashUsesDefaultCost(t *testing.T) {
+	cost, err := bcrypt.Cost(dummyPasswordHash)
+	if err != nil {
+		t.Fatalf("Dummy hash khong hop le: %v", err)
+	}
+
+	if cost != bcrypt.DefaultCost {
+		t.Errorf("Dummy hash cost = %d, muon %d",
+			cost, bcrypt.DefaultCost)
+	}
+
+	err = bcrypt.CompareHashAndPassword(
+		dummyPasswordHash,
+		[]byte("password123"),
+	)
+
+	if !errors.Is(err, bcrypt.ErrMismatchedHashAndPassword) {
+		t.Errorf("Dummy hash khong hoat dong dung: %v", err)
+	}
+}
