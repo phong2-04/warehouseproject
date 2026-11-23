@@ -2,10 +2,13 @@ package handler
 
 import (
 	"math"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"warehouseproject/internal/model"
+	"warehouseproject/internal/repository"
 )
 
 func TestValidProduct(t *testing.T) {
@@ -110,5 +113,25 @@ func TestValidProduct(t *testing.T) {
 				t.Errorf("validProduct() = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+func TestProductCreateRejectsUnknownJSONFields(t *testing.T) {
+	handler := NewProductHandler(&repository.ProductRepository{})
+	request := httptest.NewRequest(
+		http.MethodPost,
+		"/api/products",
+		strings.NewReader(`{"code":"SP001","name":"Ban phim co","price":350000,"min_stock":5,"unexpected":"value"}`),
+	)
+	recorder := httptest.NewRecorder()
+
+	handler.Create(recorder, request)
+
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf(
+			"Create() status = %d, want %d; body: %s",
+			recorder.Code,
+			http.StatusBadRequest,
+			recorder.Body.String(),
+		)
 	}
 }

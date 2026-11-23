@@ -101,7 +101,7 @@ func (h *ProductHandler) GetByID(w http.ResponseWriter, r *http.Request, rawID s
 
 func (h *ProductHandler) Create(w http.ResponseWriter, r *http.Request) {
 	var product model.Product
-	if err := decodeJSONBody(w, r, &product, 1<<20, false); err != nil {
+	if err := decodeJSONBody(w, r, &product, 1<<20, true); err != nil {
 		if isRequestBodyTooLarge(err) {
 			writeProductError(w, http.StatusRequestEntityTooLarge, "Request body qua lon")
 			return
