@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"unicode/utf8"
 
 	"warehouseproject/internal/model"
 	"warehouseproject/internal/repository"
@@ -42,7 +43,7 @@ func (s *UserManagementService) Create(
 	if username == "" || password == "" || fullName == "" {
 		return nil, ErrInvalidUserData
 	}
-	if len(username) > 50 || len(password) < 8 || len(password) > 72 {
+	if utf8.RuneCountInString(username) > 50 || utf8.RuneCountInString(fullName) > 100 || len(password) < 8 || len(password) > 72 {
 		return nil, ErrInvalidUserData
 	}
 	if role != "admin" && role != "staff" {
@@ -84,7 +85,7 @@ func (s *UserManagementService) Update(
 	if id <= 0 || username == "" || fullName == "" {
 		return nil, ErrInvalidUserData
 	}
-	if len(username) > 50 {
+	if utf8.RuneCountInString(username) > 50 || utf8.RuneCountInString(fullName) > 100 {
 		return nil, ErrInvalidUserData
 	}
 	if role != "admin" && role != "staff" {
