@@ -1,8 +1,6 @@
 package handler
 
 import (
-	"net"
-	"net/http"
 	"sync"
 	"time"
 )
@@ -66,16 +64,6 @@ func newConfiguredLoginAttemptLimiter(
 		lock:        lock,
 		maxTracked:  maxTracked,
 	}
-}
-
-// Lay IP tu ket noi truc tiep, khong tin header X-Forwarded-For.
-func getClientIP(r *http.Request) string {
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err == nil {
-		return host
-	}
-
-	return r.RemoteAddr
 }
 
 // Tra ve so giay con lai neu key dang bi khoa.

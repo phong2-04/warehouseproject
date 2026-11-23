@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"net/netip"
 	"strconv"
 	"strings"
 	"time"
@@ -22,6 +23,7 @@ type AuthHandler struct {
 	UserService     authUserService
 	loginLimiter    *loginAttemptLimiter
 	usernameLimiter *loginAttemptLimiter
+	trustedProxies  []netip.Prefix
 }
 
 type LoginRequest struct {
@@ -67,7 +69,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	clientIP := getClientIP(r)
+	clientIP := getClientIPWithTrustedProxies(r, h.trustedProxies)
 
 	if retryAfter := h.loginLimiter.retryAfter(clientIP, time.Now()); retryAfter > 0 {
 		w.Header().Set("Retry-After", strconv.Itoa(retryAfter))

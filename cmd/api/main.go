@@ -35,7 +35,11 @@ func main() {
 	// Khoi tao repository va service xac thuc.
 	userRepo := repository.NewUserRepository(db)
 	userService := service.NewUserService(userRepo, jwtSecret)
-	authHandler := handler.NewAuthHandler(userService)
+	trustedProxies, err := handler.ParseTrustedProxies(os.Getenv("TRUSTED_PROXIES"))
+	if err != nil {
+		log.Fatal("Cau hinh TRUSTED_PROXIES khong hop le: ", err)
+	}
+	authHandler := handler.NewAuthHandlerWithTrustedProxies(userService, trustedProxies)
 
 	mux := http.NewServeMux()
 
