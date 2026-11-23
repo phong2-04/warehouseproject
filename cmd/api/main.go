@@ -1,10 +1,14 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"warehouseproject/internal/database"
@@ -208,7 +212,6 @@ func main() {
 		mux.ServeHTTP(w, r)
 	})
 
-	log.Println("API server dang chay tai http://localhost:8080")
 	server := &http.Server{
 		Addr:              ":8080",
 		Handler:           corsHandler,
@@ -218,5 +221,48 @@ func main() {
 		IdleTimeout:       60 * time.Second,
 	}
 
-	log.Fatal(server.ListenAndServe())
+	shutdownContext, stop := signal.NotifyContext(
+		context.Background(),
+		os.Interrupt,
+		syscall.SIGTERM,
+	)
+	defer stop()
+
+	serverErrors := make(chan error, 1)
+
+	go func() {
+		log.Println("API server dang chay tai http://localhost:8080")
+		serverErrors <- server.ListenAndServe()
+	}()
+
+	select {
+	case err := <-serverErrors:
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Fatal("Loi HTTP server: ", err)
+		}
+
+	case <-shutdownContext.Done():
+		log.Println("Nhan tin hieu dung server, dang cho request hoan tat...")
+
+		ctx, cancel := context.WithTimeout(
+			context.Background(),
+			10*time.Second,
+		)
+		defer cancel()
+
+		if err := server.Shutdown(ctx); err != nil {
+			log.Println("Graceful shutdown that bai:", err)
+
+			if closeErr := server.Close(); closeErr != nil {
+				log.Println("Loi dong server:", closeErr)
+			}
+		}
+
+		if err := <-serverErrors; err != nil &&
+			!errors.Is(err, http.ErrServerClosed) {
+			log.Println("Loi khi server dung:", err)
+		}
+
+		log.Println("API server da dung")
+	}
 }
