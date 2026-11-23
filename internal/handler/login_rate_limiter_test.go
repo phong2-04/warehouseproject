@@ -3,6 +3,7 @@ package handler
 import (
 	"net/http/httptest"
 	"strconv"
+	"sync"
 	"testing"
 	"time"
 )
@@ -153,5 +154,40 @@ func TestLoginAttemptLimiter_MaxTrackedIPs(t *testing.T) {
 
 	if _, exists := limiter.attempts[newIP]; !exists {
 		t.Error("IP moi phai duoc theo doi")
+	}
+}
+
+// Kiem tra limiter an toan khi nhieu goroutine truy cap dong thoi.
+func TestLoginAttemptLimiter_ConcurrentAccess(t *testing.T) {
+	limiter := newLoginAttemptLimiter()
+	ip := "192.168.1.100"
+
+	var wg sync.WaitGroup
+
+	for i := 0; i < 100; i++ {
+		wg.Add(1)
+
+		go func(i int) {
+			defer wg.Done()
+
+			now := time.Now()
+			limiter.recordFailure(ip, now)
+			limiter.retryAfter(ip, now)
+
+			if i%10 == 0 {
+				limiter.reset(ip)
+			}
+		}(i)
+	}
+
+	wg.Wait()
+
+	// Sau khi cac goroutine ket thuc, ghi 5 lan sai lien tiep.
+	for i := 0; i < maxLoginFailures; i++ {
+		limiter.recordFailure(ip, time.Now())
+	}
+
+	if got := limiter.retryAfter(ip, time.Now()); got <= 0 {
+		t.Error("Limiter phai khoa IP sau 5 lan dang nhap sai")
 	}
 }
