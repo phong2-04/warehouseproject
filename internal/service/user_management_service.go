@@ -42,7 +42,7 @@ func (s *UserManagementService) Create(
 	if username == "" || password == "" || fullName == "" {
 		return nil, ErrInvalidUserData
 	}
-	if len(username) > 50 || len(password) < 8 {
+	if len(username) > 50 || len(password) < 8 || len(password) > 72 {
 		return nil, ErrInvalidUserData
 	}
 	if role != "admin" && role != "staff" {

@@ -22,6 +22,7 @@ func TestUserManagementServiceCreateInvalidData(t *testing.T) {
 		{"FullName rong", "user01", "password123", "", "staff"},
 		{"Username qua dai", strings.Repeat("a", 51), "password123", "Nguyen Van A", "staff"},
 		{"Password qua ngan", "user01", "1234567", "Nguyen Van A", "staff"},
+		{"Password vuot 72 byte", "user01", strings.Repeat("a", 73), "Nguyen Van A", "staff"},
 		{"Role khong hop le", "user01", "password123", "Nguyen Van A", "manager"},
 	}
 
