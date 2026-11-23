@@ -1,6 +1,6 @@
 
 import { useEffect, useState } from 'react'
-import { apiRequest, login } from './api/client'
+import { apiRequest, login, logout } from './api/client'
 import './App.css'
 import Login from './components/Login'
 import Sidebar from './components/Sidebar'
@@ -293,20 +293,30 @@ const [stockForm, setStockForm] = useState({
     }
   }
 
-  function handleLogout() {
-    localStorage.removeItem('access_token')
-    localStorage.removeItem('refresh_token')
+  async function handleLogout() {
+    const refreshToken = localStorage.getItem('refresh_token')
 
-    setToken(null)
-    setRole('')
-    setProducts([])
-    setCategories([])
-    setUsers([])
-    setPassword('')
-    setError('')
-    setActivePage('dashboard')
-    setUserForm({ ...emptyUser })
-    setEditingUserId(null)
+    try {
+      if (refreshToken) {
+        await logout(refreshToken)
+      }
+    } catch (err) {
+      console.error('Khong the thu hoi refresh token:', err)
+    } finally {
+      localStorage.removeItem('access_token')
+      localStorage.removeItem('refresh_token')
+
+      setToken(null)
+      setRole('')
+      setProducts([])
+      setCategories([])
+      setUsers([])
+      setPassword('')
+      setError('')
+      setActivePage('dashboard')
+      setUserForm({ ...emptyUser })
+      setEditingUserId(null)
+    }
   }
 
   function makeProductPayload(product, includeQuantity = true) {

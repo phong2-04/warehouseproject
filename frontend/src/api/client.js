@@ -1,4 +1,4 @@
-﻿const API_URL = 'http://localhost:8080/api'
+const API_URL = 'http://localhost:8080/api'
 
 export async function login(username, password) {
   const response = await fetch(`${API_URL}/login`, {
@@ -39,6 +39,22 @@ export async function apiRequest(path, options = {}) {
 
   if (!response.ok) {
     throw new Error(data.error || `Lỗi API (${response.status})`)
+  }
+
+  return data
+}
+
+export async function logout(refreshToken) {
+  const response = await fetch(`${API_URL}/logout`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ refresh_token: refreshToken }),
+  })
+
+  const data = await response.json().catch(() => ({}))
+
+  if (!response.ok) {
+    throw new Error(data.error || 'Đăng xuất thất bại')
   }
 
   return data
