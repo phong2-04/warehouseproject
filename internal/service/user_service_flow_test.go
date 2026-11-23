@@ -282,9 +282,15 @@ func TestUserService_RefreshAccessTokenFlow(t *testing.T) {
 
 		mock.ExpectBegin()
 
-		mock.ExpectQuery("UPDATE refresh_tokens").
+		mock.ExpectQuery("SELECT expires_at <= now()").
 			WithArgs(int64(1), hashRefreshToken(oldToken)).
-			WillReturnRows(pgxmock.NewRows([]string{"id"}).AddRow(int64(10)))
+			WillReturnRows(pgxmock.NewRows([]string{
+				"expired", "revoked",
+			}).AddRow(false, false))
+
+		mock.ExpectExec("UPDATE refresh_tokens").
+			WithArgs(int64(1), hashRefreshToken(oldToken)).
+			WillReturnResult(pgxmock.NewResult("UPDATE", 1))
 
 		mock.ExpectExec("INSERT INTO refresh_tokens").
 			WithArgs(
@@ -388,7 +394,7 @@ func TestUserService_RefreshAccessTokenFlow(t *testing.T) {
 
 		mock.ExpectBegin()
 
-		mock.ExpectQuery("UPDATE refresh_tokens").
+		mock.ExpectQuery("SELECT expires_at <= now()").
 			WithArgs(int64(1), hashRefreshToken(token)).
 			WillReturnError(pgx.ErrNoRows)
 

@@ -15,7 +15,8 @@ import (
 var (
 	ErrUserNotFound         = errors.New("khong tim thay nguoi dung")
 	ErrLastAdmin            = errors.New("khong the xoa hoac ha quyen admin cuoi cung")
-	ErrRefreshTokenNotFound = errors.New("refresh token khong ton tai hoac da bi thu hoi")
+	ErrRefreshTokenNotFound = errors.New("refresh token khong ton tai hoac da het han")
+	ErrRefreshTokenReuse    = errors.New("phat hien refresh token bi su dung lai")
 )
 
 type userDB interface {
@@ -295,6 +296,7 @@ func (r *UserRepository) CreateRefreshToken(
 }
 
 // Thu hoi token cu va luu token moi trong cung mot transaction.
+// Rotate Refresh Token và phát hiện token cũ bị sử dụng lại.
 func (r *UserRepository) RotateRefreshToken(
 	ctx context.Context,
 	userID int64,
@@ -308,21 +310,55 @@ func (r *UserRepository) RotateRefreshToken(
 	}
 	defer tx.Rollback(ctx)
 
-	var tokenID int64
+	var expired bool
+	var revoked bool
 
 	err = tx.QueryRow(ctx, `
+        SELECT expires_at <= now(), revoked_at IS NOT NULL
+        FROM refresh_tokens
+        WHERE user_id = $1 AND token_hash = $2
+        FOR UPDATE
+    `, userID, oldTokenHash).Scan(&expired, &revoked)
+
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrRefreshTokenNotFound
+	}
+	if err != nil {
+		return err
+	}
+
+	if expired {
+		return ErrRefreshTokenNotFound
+	}
+
+	if revoked {
+		// Token đã bị thu hồi nhưng vẫn được sử dụng:
+		// thu hồi tất cả Refresh Token còn hiệu lực của tài khoản.
+		_, err = tx.Exec(ctx, `
+                UPDATE refresh_tokens
+                SET revoked_at = now()
+                WHERE user_id = $1
+                  AND revoked_at IS NULL
+                  AND expires_at > now()
+            `, userID)
+		if err != nil {
+			return err
+		}
+
+		if err := tx.Commit(ctx); err != nil {
+			return err
+		}
+
+		return ErrRefreshTokenReuse
+	}
+
+	_, err = tx.Exec(ctx, `
         UPDATE refresh_tokens
         SET revoked_at = now()
         WHERE user_id = $1
           AND token_hash = $2
           AND revoked_at IS NULL
-          AND expires_at > now()
-        RETURNING id
-    `, userID, oldTokenHash).Scan(&tokenID)
-
-	if errors.Is(err, pgx.ErrNoRows) {
-		return ErrRefreshTokenNotFound
-	}
+    `, userID, oldTokenHash)
 	if err != nil {
 		return err
 	}
@@ -361,4 +397,18 @@ func (r *UserRepository) RevokeRefreshToken(
 	}
 
 	return nil
+}
+
+// Xoa cac Refresh Token da het han.
+// Token bi thu hoi nhung chua het han van duoc giu lai de phat hien reuse.
+func (r *UserRepository) DeleteExpiredRefreshTokens(ctx context.Context) (int64, error) {
+	result, err := r.DB.Exec(ctx, `
+        DELETE FROM refresh_tokens
+        WHERE expires_at <= now()
+    `)
+	if err != nil {
+		return 0, err
+	}
+
+	return result.RowsAffected(), nil
 }

@@ -232,6 +232,45 @@ func main() {
 	)
 	defer stop()
 
+	cleanupDone := make(chan struct{})
+
+	go func() {
+		defer close(cleanupDone)
+
+		cleanup := func() {
+			ctx, cancel := context.WithTimeout(
+				shutdownContext,
+				10*time.Second,
+			)
+			defer cancel()
+
+			deleted, err := userRepo.DeleteExpiredRefreshTokens(ctx)
+			if err != nil {
+				log.Println("Cleanup Refresh Token that bai:", err)
+				return
+			}
+
+			if deleted > 0 {
+				log.Printf("Da xoa %d Refresh Token het han", deleted)
+			}
+		}
+
+		// Chay mot lan khi khoi dong.
+		cleanup()
+
+		ticker := time.NewTicker(24 * time.Hour)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-shutdownContext.Done():
+				return
+			case <-ticker.C:
+				cleanup()
+			}
+		}
+	}()
+
 	serverErrors := make(chan error, 1)
 
 	go func() {
@@ -269,4 +308,7 @@ func main() {
 
 		log.Println("API server da dung")
 	}
+
+	stop()
+	<-cleanupDone
 }

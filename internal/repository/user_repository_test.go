@@ -408,9 +408,14 @@ func TestUserRepository_RotateRefreshToken(t *testing.T) {
 		expiresAt := time.Now().Add(24 * time.Hour)
 
 		mock.ExpectBegin()
-		mock.ExpectQuery("UPDATE refresh_tokens").
+		mock.ExpectQuery("SELECT expires_at <= now()").
 			WithArgs(int64(1), "old-hash").
-			WillReturnRows(pgxmock.NewRows([]string{"id"}).AddRow(int64(10)))
+			WillReturnRows(pgxmock.NewRows([]string{
+				"expired", "revoked",
+			}).AddRow(false, false))
+		mock.ExpectExec("UPDATE refresh_tokens").
+			WithArgs(int64(1), "old-hash").
+			WillReturnResult(pgxmock.NewResult("UPDATE", 1))
 		mock.ExpectExec("INSERT INTO refresh_tokens").
 			WithArgs(int64(1), "new-hash", expiresAt).
 			WillReturnResult(pgxmock.NewResult("INSERT", 1))
@@ -426,6 +431,57 @@ func TestUserRepository_RotateRefreshToken(t *testing.T) {
 		checkUserMock(t, mock)
 	})
 
+	t.Run("revoked token reuse revokes active sessions", func(t *testing.T) {
+		mock, repo := newUserMock(t)
+		defer mock.Close()
+
+		expiresAt := time.Now().Add(24 * time.Hour)
+
+		mock.ExpectBegin()
+		mock.ExpectQuery("SELECT expires_at <= now()").
+			WithArgs(int64(1), "old-hash").
+			WillReturnRows(pgxmock.NewRows([]string{
+				"expired", "revoked",
+			}).AddRow(false, true))
+		mock.ExpectExec("UPDATE refresh_tokens").
+			WithArgs(int64(1)).
+			WillReturnResult(pgxmock.NewResult("UPDATE", 2))
+		mock.ExpectCommit()
+
+		err := repo.RotateRefreshToken(
+			context.Background(), 1, "old-hash", "new-hash", expiresAt,
+		)
+		if !errors.Is(err, ErrRefreshTokenReuse) {
+			t.Fatalf("mong doi ErrRefreshTokenReuse, nhan duoc: %v", err)
+		}
+
+		checkUserMock(t, mock)
+	})
+
+	t.Run("expired token is not reuse", func(t *testing.T) {
+		mock, repo := newUserMock(t)
+		defer mock.Close()
+
+		expiresAt := time.Now().Add(24 * time.Hour)
+
+		mock.ExpectBegin()
+		mock.ExpectQuery("SELECT expires_at <= now()").
+			WithArgs(int64(1), "old-hash").
+			WillReturnRows(pgxmock.NewRows([]string{
+				"expired", "revoked",
+			}).AddRow(true, false))
+		mock.ExpectRollback()
+
+		err := repo.RotateRefreshToken(
+			context.Background(), 1, "old-hash", "new-hash", expiresAt,
+		)
+		if !errors.Is(err, ErrRefreshTokenNotFound) {
+			t.Fatalf("mong doi ErrRefreshTokenNotFound, nhan duoc: %v", err)
+		}
+
+		checkUserMock(t, mock)
+	})
+
 	t.Run("old token not found", func(t *testing.T) {
 		mock, repo := newUserMock(t)
 		defer mock.Close()
@@ -433,7 +489,7 @@ func TestUserRepository_RotateRefreshToken(t *testing.T) {
 		expiresAt := time.Now().Add(24 * time.Hour)
 
 		mock.ExpectBegin()
-		mock.ExpectQuery("UPDATE refresh_tokens").
+		mock.ExpectQuery("SELECT expires_at <= now()").
 			WithArgs(int64(1), "old-hash").
 			WillReturnError(pgx.ErrNoRows)
 		mock.ExpectRollback()
@@ -448,7 +504,6 @@ func TestUserRepository_RotateRefreshToken(t *testing.T) {
 		checkUserMock(t, mock)
 	})
 }
-
 func TestUserRepository_RevokeRefreshToken(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		mock, repo := newUserMock(t)
@@ -477,6 +532,45 @@ func TestUserRepository_RevokeRefreshToken(t *testing.T) {
 		err := repo.RevokeRefreshToken(context.Background(), 1, "missing-hash")
 		if !errors.Is(err, ErrRefreshTokenNotFound) {
 			t.Errorf("mong doi ErrRefreshTokenNotFound, nhan duoc: %v", err)
+		}
+
+		checkUserMock(t, mock)
+	})
+}
+
+// Kiem tra cleanup Refresh Token het han.
+func TestUserRepository_DeleteExpiredRefreshTokens(t *testing.T) {
+	t.Run("success", func(t *testing.T) {
+		mock, repo := newUserMock(t)
+		defer mock.Close()
+
+		mock.ExpectExec("DELETE FROM refresh_tokens").
+			WillReturnResult(pgxmock.NewResult("DELETE", 3))
+
+		deleted, err := repo.DeleteExpiredRefreshTokens(context.Background())
+		if err != nil {
+			t.Fatalf("khong mong doi loi: %v", err)
+		}
+		if deleted != 3 {
+			t.Errorf("mong doi xoa 3 token, nhan duoc %d", deleted)
+		}
+
+		checkUserMock(t, mock)
+	})
+
+	t.Run("database error", func(t *testing.T) {
+		mock, repo := newUserMock(t)
+		defer mock.Close()
+
+		mock.ExpectExec("DELETE FROM refresh_tokens").
+			WillReturnError(errors.New("database error"))
+
+		deleted, err := repo.DeleteExpiredRefreshTokens(context.Background())
+		if err == nil {
+			t.Fatal("mong doi loi database")
+		}
+		if deleted != 0 {
+			t.Errorf("so token xoa khi gap loi phai la 0, nhan duoc %d", deleted)
 		}
 
 		checkUserMock(t, mock)

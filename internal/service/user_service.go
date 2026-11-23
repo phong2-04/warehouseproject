@@ -257,9 +257,10 @@ func (s *UserService) RefreshAccessToken(
 		time.Now().Add(RefreshTokenDuration),
 	)
 	if err != nil {
-		if errors.Is(err, repository.ErrRefreshTokenNotFound) {
-			return nil, ErrInvalidRefreshToken
-		}
+		if errors.Is(err, repository.ErrRefreshTokenNotFound) ||
+                        errors.Is(err, repository.ErrRefreshTokenReuse) {
+                        return nil, ErrInvalidRefreshToken
+                }
 		return nil, err
 	}
 
