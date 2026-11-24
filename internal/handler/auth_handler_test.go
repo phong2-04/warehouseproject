@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"warehouseproject/internal/middleware"
 	"warehouseproject/internal/service"
 )
 
@@ -20,12 +21,17 @@ type fakeAuthUserService struct {
 	refreshErr    error
 	logoutErr     error
 
-	loginCalls   int
-	refreshCalls int
-	logoutCalls  int
-	username     string
-	password     string
-	refreshToken string
+	changePasswordErr    error
+	changePasswordCalls  int
+	changePasswordUserID int64
+	currentPassword      string
+	newPassword          string
+	loginCalls           int
+	refreshCalls         int
+	logoutCalls          int
+	username             string
+	password             string
+	refreshToken         string
 }
 
 func (f *fakeAuthUserService) Login(ctx context.Context, username, password string) (*service.LoginResponse, error) {
@@ -47,6 +53,17 @@ func (f *fakeAuthUserService) Logout(ctx context.Context, token string) error {
 	return f.logoutErr
 }
 
+func (f *fakeAuthUserService) ChangePassword(
+	ctx context.Context,
+	userID int64,
+	currentPassword, newPassword string,
+) error {
+	f.changePasswordCalls++
+	f.changePasswordUserID = userID
+	f.currentPassword = currentPassword
+	f.newPassword = newPassword
+	return f.changePasswordErr
+}
 func newAuthTestRequest(method, body string) (*httptest.ResponseRecorder, *http.Request) {
 	recorder := httptest.NewRecorder()
 	req := httptest.NewRequest(method, "/api/test", strings.NewReader(body))
@@ -339,5 +356,140 @@ func TestUsernameLimiterUnlocksAfterFiveMinutes(t *testing.T) {
 	unlockTime := now.Add(usernameLockDuration)
 	if got := limiter.retryAfter("target-user", unlockTime); got != 0 {
 		t.Errorf("username van bi khoa sau 5 phut, Retry-After = %d", got)
+	}
+}
+
+func TestAuthHandlerChangePassword(t *testing.T) {
+	tests := []struct {
+		name       string
+		method     string
+		body       string
+		withUser   bool
+		serviceErr error
+		wantStatus int
+		wantCalls  int
+	}{
+		{
+			name:       "method khong hop le",
+			method:     http.MethodGet,
+			body:       `{"current_password":"oldpass123","new_password":"newpass123"}`,
+			withUser:   true,
+			wantStatus: http.StatusMethodNotAllowed,
+		},
+		{
+			name:       "JSON khong hop le",
+			method:     http.MethodPost,
+			body:       `{`,
+			withUser:   true,
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:       "thieu mat khau",
+			method:     http.MethodPost,
+			body:       `{"current_password":"","new_password":"newpass123"}`,
+			withUser:   true,
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:       "chua xac thuc",
+			method:     http.MethodPost,
+			body:       `{"current_password":"oldpass123","new_password":"newpass123"}`,
+			wantStatus: http.StatusUnauthorized,
+		},
+		{
+			name:       "sai mat khau hien tai",
+			method:     http.MethodPost,
+			body:       `{"current_password":"wrongpass","new_password":"newpass123"}`,
+			withUser:   true,
+			serviceErr: service.ErrInvalidCurrentPassword,
+			wantStatus: http.StatusUnauthorized,
+			wantCalls:  1,
+		},
+		{
+			name:       "mat khau moi khong hop le",
+			method:     http.MethodPost,
+			body:       `{"current_password":"oldpass123","new_password":"123"}`,
+			withUser:   true,
+			serviceErr: service.ErrInvalidNewPassword,
+			wantStatus: http.StatusBadRequest,
+			wantCalls:  1,
+		},
+		{
+			name:       "mat khau moi trung mat khau cu",
+			method:     http.MethodPost,
+			body:       `{"current_password":"oldpass123","new_password":"oldpass123"}`,
+			withUser:   true,
+			serviceErr: service.ErrPasswordUnchanged,
+			wantStatus: http.StatusBadRequest,
+			wantCalls:  1,
+		},
+		{
+			name:       "loi he thong",
+			method:     http.MethodPost,
+			body:       `{"current_password":"oldpass123","new_password":"newpass123"}`,
+			withUser:   true,
+			serviceErr: errors.New("database error"),
+			wantStatus: http.StatusInternalServerError,
+			wantCalls:  1,
+		},
+		{
+			name:       "doi mat khau thanh cong",
+			method:     http.MethodPost,
+			body:       `{"current_password":"oldpass123","new_password":"newpass123"}`,
+			withUser:   true,
+			wantStatus: http.StatusOK,
+			wantCalls:  1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fake := &fakeAuthUserService{
+				changePasswordErr: tt.serviceErr,
+			}
+			handler := NewAuthHandler(fake)
+
+			recorder, req := newAuthTestRequest(tt.method, tt.body)
+
+			if tt.withUser {
+				ctx := context.WithValue(
+					req.Context(),
+					middleware.UserIDKey,
+					int64(7),
+				)
+				req = req.WithContext(ctx)
+			}
+
+			handler.ChangePassword(recorder, req)
+
+			if recorder.Code != tt.wantStatus {
+				t.Fatalf(
+					"status = %d, muon %d; body: %s",
+					recorder.Code,
+					tt.wantStatus,
+					recorder.Body.String(),
+				)
+			}
+
+			if fake.changePasswordCalls != tt.wantCalls {
+				t.Errorf(
+					"so lan goi ChangePassword = %d, muon %d",
+					fake.changePasswordCalls,
+					tt.wantCalls,
+				)
+			}
+
+			if tt.name == "doi mat khau thanh cong" {
+				if fake.changePasswordUserID != 7 {
+					t.Errorf("userID = %d, muon 7", fake.changePasswordUserID)
+				}
+				if fake.currentPassword != "oldpass123" {
+					t.Errorf("currentPassword = %q", fake.currentPassword)
+				}
+				if fake.newPassword != "newpass123" {
+					t.Errorf("newPassword = %q", fake.newPassword)
+				}
+			}
+		})
 	}
 }

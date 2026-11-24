@@ -135,6 +135,46 @@ func (r *UserRepository) GetByID(
 	return &user, nil
 }
 
+// Cap nhat mat khau va thu hoi cac Refresh Token dang hoat dong.
+func (r *UserRepository) UpdatePasswordHash(
+	ctx context.Context,
+	userID int64,
+	passwordHash string,
+) error {
+	tx, err := r.DB.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	result, err := tx.Exec(
+		ctx,
+		`UPDATE users SET password_hash = $1 WHERE id = $2`,
+		passwordHash,
+		userID,
+	)
+	if err != nil {
+		return err
+	}
+
+	if result.RowsAffected() == 0 {
+		return ErrUserNotFound
+	}
+
+	_, err = tx.Exec(
+		ctx,
+		`UPDATE refresh_tokens
+         SET revoked_at = NOW()
+         WHERE user_id = $1 AND revoked_at IS NULL`,
+		userID,
+	)
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit(ctx)
+}
+
 // Tao tai khoan moi.
 func (r *UserRepository) Create(
 	ctx context.Context,

@@ -557,3 +557,171 @@ func TestDummyPasswordHashUsesDefaultCost(t *testing.T) {
 		t.Errorf("Dummy hash khong hoat dong dung: %v", err)
 	}
 }
+
+// Kiem tra luong doi mat khau.
+func TestUserService_ChangePassword(t *testing.T) {
+	t.Run("success", func(t *testing.T) {
+		mock, service := newUserServiceMock(t)
+		defer mock.Close()
+
+		user, oldPassword := createTestUser(t)
+		newPassword := "newPassword456"
+
+		mock.ExpectQuery("SELECT id, username, password_hash, full_name, role").
+			WithArgs(user.ID).
+			WillReturnRows(pgxmock.NewRows([]string{
+				"id", "username", "password_hash", "full_name", "role",
+			}).AddRow(
+				user.ID,
+				user.Username,
+				user.PasswordHash,
+				user.FullName,
+				user.Role,
+			))
+
+		mock.ExpectBegin()
+		mock.ExpectExec("UPDATE users SET password_hash").
+			WithArgs(pgxmock.AnyArg(), user.ID).
+			WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+		mock.ExpectExec("UPDATE refresh_tokens").
+			WithArgs(user.ID).
+			WillReturnResult(pgxmock.NewResult("UPDATE", 2))
+		mock.ExpectCommit()
+
+		err := service.ChangePassword(
+			context.Background(),
+			user.ID,
+			oldPassword,
+			newPassword,
+		)
+		if err != nil {
+			t.Fatalf("ChangePassword that bai: %v", err)
+		}
+
+		checkUserServiceMock(t, mock)
+	})
+
+	t.Run("wrong current password", func(t *testing.T) {
+		mock, service := newUserServiceMock(t)
+		defer mock.Close()
+
+		user, _ := createTestUser(t)
+
+		mock.ExpectQuery("SELECT id, username, password_hash, full_name, role").
+			WithArgs(user.ID).
+			WillReturnRows(pgxmock.NewRows([]string{
+				"id", "username", "password_hash", "full_name", "role",
+			}).AddRow(
+				user.ID,
+				user.Username,
+				user.PasswordHash,
+				user.FullName,
+				user.Role,
+			))
+
+		err := service.ChangePassword(
+			context.Background(),
+			user.ID,
+			"wrongPassword",
+			"newPassword456",
+		)
+
+		if !errors.Is(err, ErrInvalidCurrentPassword) {
+			t.Errorf("Muon ErrInvalidCurrentPassword, nhan duoc: %v", err)
+		}
+
+		checkUserServiceMock(t, mock)
+	})
+
+	t.Run("new password too short", func(t *testing.T) {
+		mock, service := newUserServiceMock(t)
+		defer mock.Close()
+
+		err := service.ChangePassword(
+			context.Background(),
+			1,
+			"password123",
+			"short",
+		)
+
+		if !errors.Is(err, ErrInvalidNewPassword) {
+			t.Errorf("Muon ErrInvalidNewPassword, nhan duoc: %v", err)
+		}
+
+		checkUserServiceMock(t, mock)
+	})
+
+	t.Run("new password too long", func(t *testing.T) {
+		mock, service := newUserServiceMock(t)
+		defer mock.Close()
+
+		err := service.ChangePassword(
+			context.Background(),
+			1,
+			"password123",
+			string(make([]byte, 73)),
+		)
+
+		if !errors.Is(err, ErrInvalidNewPassword) {
+			t.Errorf("Muon ErrInvalidNewPassword, nhan duoc: %v", err)
+		}
+
+		checkUserServiceMock(t, mock)
+	})
+
+	t.Run("new password unchanged", func(t *testing.T) {
+		mock, service := newUserServiceMock(t)
+		defer mock.Close()
+
+		user, oldPassword := createTestUser(t)
+
+		mock.ExpectQuery("SELECT id, username, password_hash, full_name, role").
+			WithArgs(user.ID).
+			WillReturnRows(pgxmock.NewRows([]string{
+				"id", "username", "password_hash", "full_name", "role",
+			}).AddRow(
+				user.ID,
+				user.Username,
+				user.PasswordHash,
+				user.FullName,
+				user.Role,
+			))
+
+		err := service.ChangePassword(
+			context.Background(),
+			user.ID,
+			oldPassword,
+			oldPassword,
+		)
+
+		if !errors.Is(err, ErrPasswordUnchanged) {
+			t.Errorf("Muon ErrPasswordUnchanged, nhan duoc: %v", err)
+		}
+
+		checkUserServiceMock(t, mock)
+	})
+
+	t.Run("user not found", func(t *testing.T) {
+		mock, service := newUserServiceMock(t)
+		defer mock.Close()
+
+		mock.ExpectQuery("SELECT id, username, password_hash, full_name, role").
+			WithArgs(int64(99)).
+			WillReturnRows(pgxmock.NewRows([]string{
+				"id", "username", "password_hash", "full_name", "role",
+			}))
+
+		err := service.ChangePassword(
+			context.Background(),
+			99,
+			"password123",
+			"newPassword456",
+		)
+
+		if !errors.Is(err, repository.ErrUserNotFound) {
+			t.Errorf("Muon ErrUserNotFound, nhan duoc: %v", err)
+		}
+
+		checkUserServiceMock(t, mock)
+	})
+}

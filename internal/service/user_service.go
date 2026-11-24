@@ -258,9 +258,9 @@ func (s *UserService) RefreshAccessToken(
 	)
 	if err != nil {
 		if errors.Is(err, repository.ErrRefreshTokenNotFound) ||
-                        errors.Is(err, repository.ErrRefreshTokenReuse) {
-                        return nil, ErrInvalidRefreshToken
-                }
+			errors.Is(err, repository.ErrRefreshTokenReuse) {
+			return nil, ErrInvalidRefreshToken
+		}
 		return nil, err
 	}
 
@@ -292,4 +292,56 @@ func (s *UserService) Logout(
 	}
 
 	return err
+}
+
+// Loi khi doi mat khau.
+var (
+	ErrInvalidCurrentPassword = errors.New("mat khau hien tai khong dung")
+	ErrInvalidNewPassword     = errors.New("mat khau moi phai co tu 8 den 72 byte")
+	ErrPasswordUnchanged      = errors.New("mat khau moi phai khac mat khau cu")
+)
+
+// ChangePassword kiem tra mat khau cu va cap nhat mat khau moi.
+func (s *UserService) ChangePassword(
+	ctx context.Context,
+	userID int64,
+	currentPassword string,
+	newPassword string,
+) error {
+	if userID <= 0 {
+		return repository.ErrUserNotFound
+	}
+
+	if len(newPassword) < 8 || len(newPassword) > 72 {
+		return ErrInvalidNewPassword
+	}
+
+	user, err := s.UserRepo.GetByID(ctx, userID)
+	if err != nil {
+		return err
+	}
+
+	if err := bcrypt.CompareHashAndPassword(
+		[]byte(user.PasswordHash),
+		[]byte(currentPassword),
+	); err != nil {
+		return ErrInvalidCurrentPassword
+	}
+
+	if err := bcrypt.CompareHashAndPassword(
+		[]byte(user.PasswordHash),
+		[]byte(newPassword),
+	); err == nil {
+		return ErrPasswordUnchanged
+	}
+
+	newHash, err := bcrypt.GenerateFromPassword(
+		[]byte(newPassword),
+		bcrypt.DefaultCost,
+	)
+	if err != nil {
+		return err
+	}
+
+	return s.UserRepo.UpdatePasswordHash(ctx, userID, string(newHash))
 }

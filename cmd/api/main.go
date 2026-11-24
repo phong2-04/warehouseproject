@@ -47,6 +47,12 @@ func main() {
 	mux.HandleFunc("/api/login", authHandler.Login)
 	mux.HandleFunc("/api/refresh-token", authHandler.RefreshToken)
 	mux.HandleFunc("/api/logout", authHandler.Logout)
+	mux.Handle(
+		"/api/change-password",
+		middleware.AuthMiddleware(jwtSecret, userRepo,
+			http.HandlerFunc(authHandler.ChangePassword),
+		),
+	)
 
 	// Xem thong tin tai khoan dang dang nhap.
 	profileHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
