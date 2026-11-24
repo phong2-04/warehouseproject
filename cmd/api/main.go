@@ -43,6 +43,37 @@ func main() {
 
 	mux := http.NewServeMux()
 
+	// Health Check: kiem tra API va ket noi PostgreSQL.
+	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			w.Header().Set("Content-Type", "application/json")
+			w.Header().Set("Allow", http.MethodGet)
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			_ = json.NewEncoder(w).Encode(map[string]string{
+				"error": "Method khong duoc ho tro",
+			})
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+		defer cancel()
+
+		w.Header().Set("Content-Type", "application/json")
+
+		if err := db.Ping(ctx); err != nil {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_ = json.NewEncoder(w).Encode(map[string]string{
+				"status":   "unhealthy",
+				"database": "disconnected",
+			})
+			return
+		}
+
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"status":   "healthy",
+			"database": "connected",
+		})
+	})
 	// Dang nhap va lam moi token.
 	mux.HandleFunc("/api/login", authHandler.Login)
 	mux.HandleFunc("/api/refresh-token", authHandler.RefreshToken)

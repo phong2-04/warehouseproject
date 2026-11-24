@@ -1,4 +1,4 @@
-# HỆ THỐNG QUẢN LÝ KHO HÀNG (WAREHOUSE MANAGEMENT SYSTEM)
+﻿# HỆ THỐNG QUẢN LÝ KHO HÀNG (WAREHOUSE MANAGEMENT SYSTEM)
 
 ## 1. Giới thiệu
 
@@ -231,7 +231,36 @@ Xem log Database:
 docker compose logs -f db
 ```
 
-### 7.7. Dừng hệ thống
+### 7.7. Kiểm tra tình trạng hoạt động (Health Check)
+
+Backend cung cấp endpoint `/health` để kiểm tra trạng thái API và kết nối PostgreSQL.
+
+Kiểm tra trực tiếp:
+
+```bash
+curl http://localhost:8080/health
+```
+
+Kết quả khi hệ thống hoạt động bình thường:
+
+```json
+{
+  "database": "connected",
+  "status": "healthy"
+}
+```
+
+Docker Compose tự động kiểm tra tình trạng Backend định kỳ.
+
+Kiểm tra trạng thái:
+
+```bash
+docker compose ps
+```
+
+Backend có trạng thái `healthy` khi API và kết nối PostgreSQL hoạt động bình thường.
+
+### 7.8. Dừng hệ thống
 
 ```bash
 docker compose down

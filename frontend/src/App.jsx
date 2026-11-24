@@ -211,6 +211,27 @@ const [stockForm, setStockForm] = useState({
   }
 
   useEffect(() => {
+    function handleSessionExpired() {
+      setToken(null)
+      setRole('')
+      setProducts([])
+      setCategories([])
+      setUsers([])
+      setPassword('')
+      setError('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.')
+      setActivePage('dashboard')
+      setUserForm({ ...emptyUser })
+      setEditingUserId(null)
+    }
+
+    window.addEventListener('auth:session-expired', handleSessionExpired)
+
+    return () => {
+      window.removeEventListener('auth:session-expired', handleSessionExpired)
+    }
+  }, [])
+
+  useEffect(() => {
     if (!token) return
 
     let cancelled = false
